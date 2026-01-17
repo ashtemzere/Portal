@@ -11,6 +11,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Checkout target branch
+        run: |
+          git checkout "${{ github.event.release.target_commitish }}"
+
       - name: Update app-repo.json
         run: |
           ./update-repo.sh
