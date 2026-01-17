@@ -28,17 +28,11 @@ jobs:
           # Move any build artifacts you want to release into upload/
           # Example: mv Portal/build/Release-iphoneos/*.ipa upload/ || true
 
-      - name: Get Version
-        id: get_version
-        run: |
-          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Portal/Resources/portal-info.plist)
-          echo "VERSION=${VERSION}" >> $GITHUB_ENV
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Portal v${{ env.VERSION }}
-          tag_name: v${{ env.VERSION }}
+          name: Portal latest
+          tag_name: latest
           files: |
             upload/*
           generate_release_notes: true
