@@ -1,6 +1,6 @@
-NAME := Feather
+NAME := Portal
 PLATFORM := iphoneos
-SCHEMES := Feather
+SCHEMES := Portal
 TMP := $(TMPDIR)/$(NAME)
 STAGE := $(TMP)/stage
 APP := $(TMP)/Build/Products/Release-$(PLATFORM)
@@ -26,7 +26,7 @@ deps:
 
 $(SCHEMES): deps
 	xcodebuild \
-	    -project Feather.xcodeproj \
+	    -project Portal.xcodeproj \
 	    -scheme "$@" \
 	    -configuration Release \
 	    -arch arm64 \
