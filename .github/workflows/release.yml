@@ -26,8 +26,8 @@ jobs:
         run: |
           make
           mkdir -p upload
-          # Move any build artifacts you want to release into upload/
-          # Example: mv Portal/build/Release-iphoneos/*.ipa upload/ || true
+          # Move the built .ipa file to upload/
+          find . -type f -name "*.ipa" -exec mv {} upload/ \;
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
