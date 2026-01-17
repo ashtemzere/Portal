@@ -96,7 +96,6 @@ struct WidgetsPagerView: View {
 
     @State private var currentPage: Int = 0
     @State private var addPageSnapshot: Int = 0
-    @GestureState private var dragY: CGFloat = 0
 
     private let hPadding: CGFloat = 16
     private let spacing: CGFloat = 10
@@ -125,37 +124,31 @@ struct WidgetsPagerView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let pageHeight = max(1, geo.size.height)
-
-            ZStack {
-                VStack(spacing: pageVisualGap) {
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(spacing: pageVisualGap) {
                     ForEach(0..<pageCountToRender, id: \.self) { p in
-                        pageContainer(page: p, pageHeight: pageHeight)
-                            .frame(height: pageHeight)
+                        pageContainer(page: p)
+                            .frame(minHeight: geo.size.height, alignment: .top)
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: PageOffsetKey.self,
+                                        value: [p: proxy.frame(in: .named("widgets-scroll")).minY]
+                                    )
+                                }
+                            )
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .offset(y: -CGFloat(currentPage) * (pageHeight + pageVisualGap) + dragY)
-                .animation(.spring(response: 0.22, dampingFraction: 0.92), value: currentPage)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 12, coordinateSpace: .local)
-                        .updating($dragY) { value, state, _ in
-                            state = value.translation.height
-                        }
-                        .onEnded { value in
-                            let predicted = value.predictedEndTranslation.height
-                            let threshold = pageHeight * 0.18
-
-                            if predicted < -threshold {
-                                currentPage = min(currentPage + 1, pageCountToRender - 1)
-                            } else if predicted > threshold {
-                                currentPage = max(currentPage - 1, 0)
-                            }
-                        }
-                )
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.bottom, tabBarClearance)
             }
-            .clipped()
+            .coordinateSpace(name: "widgets-scroll")
+            .onPreferenceChange(PageOffsetKey.self) { offsets in
+                guard let closest = offsets.min(by: { abs($0.value) < abs($1.value) })?.key else { return }
+                if currentPage != closest {
+                    currentPage = closest
+                }
+            }
             .onAppear {
                 loadWidgetsIfNeeded()
                 rebalanceByRowLimitIfNeeded()
@@ -195,7 +188,7 @@ struct WidgetsPagerView: View {
         }
     }
 
-    private func pageContainer(page: Int, pageHeight: CGFloat) -> some View {
+    private func pageContainer(page: Int) -> some View {
         let items = pageWidgets(page)
         let noWidgetsAnywhere = visibleWidgets.isEmpty
 
@@ -241,11 +234,8 @@ struct WidgetsPagerView: View {
                     .padding(.top, 28)
                 }
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(.bottom, tabBarClearance)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
     }
 
     private func addWidget(kind: WidgetKind, preferredPage: Int) {
@@ -395,6 +385,14 @@ struct WidgetsPagerView: View {
         if currentPage > pageCountToRender - 1 {
             currentPage = max(0, pageCountToRender - 1)
         }
+    }
+}
+
+private struct PageOffsetKey: PreferenceKey {
+    static var defaultValue: [Int: CGFloat] = [:]
+
+    static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
