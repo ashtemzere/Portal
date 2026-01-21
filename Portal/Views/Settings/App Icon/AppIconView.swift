@@ -26,7 +26,7 @@ extension AppIconView {
 	}
 	
 	static func altImage(_ name: String?) -> UIImage {
-		let path = Bundle.main.bundleURL.appendingPathComponent((name ?? "AppIcon60x60") + "@2x.png")
+		let path = Bundle.main.bundleURL.appendingPathComponent((name ?? "AppIcon60x60") + "https://i.imgur.com/p7ngmWs.png")
 		return UIImage(contentsOfFile: path.path) ?? UIImage()
 	}
 }
@@ -38,7 +38,7 @@ struct AppIconView: View {
 	// dont translate
 	var sections: [String: [AltIcon]] = [
 		"Main": [
-			AltIcon(displayName: "Default", author: "WSF Team", key: nil)
+			AltIcon(displayName: "ashtemobile", author: "ashte Team", key: nil)
 		],
 	]
 	
