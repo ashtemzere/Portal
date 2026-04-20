@@ -1,6 +1,6 @@
 import SwiftUI
 import CoreData
-import NimbleViews
+import NimbleViews // دڵنیابە لەوەی ئەم پەیکەیجەت هەیە
 import UIKit
 import UniformTypeIdentifiers
 
@@ -26,15 +26,23 @@ struct HomeView: View {
 
     var body: some View {
         NBNavigationView("") {
-            VStack(spacing: 0) {
-                Text(titleText)
-                    .font(.system(size: 28, weight: .bold))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
-                    .padding(.bottom, 18)
+            ZStack {
+                // باکگراوندێکی مۆدێرنی کاڵ بۆ جوانی زیاتر
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    Text(titleText)
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 12)
 
-                WidgetsPagerView(isEditing: $widgetsEditing)
+                    // بەشی سۆشیاڵ میدیا و بەستەرە خێراکان
+                    QuickLinksBar()
+
+                    WidgetsPagerView(isEditing: $widgetsEditing)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -43,8 +51,9 @@ struct HomeView: View {
                         Button {
                             NotificationCenter.default.post(name: .widgetsAddRequested, object: nil)
                         } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 16, weight: .semibold))
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundStyle(.blue)
                         }
                     }
                 }
@@ -52,11 +61,15 @@ struct HomeView: View {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if widgetsEditing {
                         Button {
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.92)) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 widgetsEditing = false
                             }
                         } label: {
-                            Text("Done").font(.system(size: 16, weight: .semibold))
+                            Text("Done").font(.system(size: 16, weight: .bold))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.15))
+                                .clipShape(Capsule())
                         }
                     }
 
@@ -74,10 +87,60 @@ struct HomeView: View {
                 Image(systemName: "person.crop.circle.fill")
                     .resizable()
                     .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.blue)
             }
         }
-        .frame(width: 36, height: 36)
+        .frame(width: 38, height: 38)
         .clipShape(Circle())
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+    }
+}
+
+// MARK: - بەشی مۆدێرنی سۆشیاڵ میدیا (گۆڕانکاری نوێ)
+struct QuickLinksBar: View {
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 18) {
+                SocialMediaIcon(icon: "globe", title: "Khoindvn", color: .blue)
+                SocialMediaIcon(icon: "message.fill", title: "Discord", color: .indigo)
+                SocialMediaIcon(icon: "bird.fill", title: "Twitter", color: .cyan)
+                SocialMediaIcon(icon: "play.rectangle.fill", title: "YouTube", color: .red)
+                SocialMediaIcon(icon: "camera.fill", title: "Instagram", color: .purple)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .padding(.bottom, 8)
+    }
+}
+
+struct SocialMediaIcon: View {
+    let icon: String
+    let title: String
+    let color: Color
+
+    var body: some View {
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            // لێرەدا دەتوانیت فرمانەکان بنووسیت بۆ کردنەوەی لینکەکان
+        }) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 54, height: 54)
+                    .background(
+                        LinearGradient(colors: [color.opacity(0.7), color], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .clipShape(Circle())
+                    .shadow(color: color.opacity(0.3), radius: 8, x: 0, y: 4)
+
+                Text(title)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -98,8 +161,8 @@ struct WidgetsPagerView: View {
     @State private var addPageSnapshot: Int = 0
 
     private let hPadding: CGFloat = 16
-    private let spacing: CGFloat = 10
-    private let baseHeight: CGFloat = 200
+    private let spacing: CGFloat = 12 // کەمێک بۆشاییم زیاد کرد بۆ هەناسەدانی کارتەکان
+    private let baseHeight: CGFloat = 180 // کەمێک کورتم کردەوە بۆ ستایلێکی فراوانتر
     private let gridMax: CGFloat = 720
 
     private let lockedKinds: Set<WidgetKind> = [.stats, .time, .deviceStats]
@@ -124,7 +187,7 @@ struct WidgetsPagerView: View {
 
     var body: some View {
         GeometryReader { geo in
-            ScrollView(.vertical, showsIndicators: true) {
+            ScrollView(.vertical, showsIndicators: false) { // نیشاندەری سکڕۆڵم شاردەوە بۆ جوانی
                 LazyVStack(spacing: pageVisualGap) {
                     ForEach(0..<pageCountToRender, id: \.self) { p in
                         pageContainer(page: p)
@@ -154,19 +217,13 @@ struct WidgetsPagerView: View {
                 rebalanceByRowLimitIfNeeded()
                 currentPage = min(currentPage, pageCountToRender - 1)
             }
-            .onChange(of: widgets) { _, _ in
-                saveWidgets()
-            }
+            .onChange(of: widgets) { _, _ in saveWidgets() }
             .onChange(of: isEditing) { _, newValue in
                 if !newValue { draggingID = nil }
                 currentPage = min(currentPage, max(0, pageCountToRender - 1))
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                draggingID = nil
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                draggingID = nil
-            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in draggingID = nil }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in draggingID = nil }
             .onReceive(NotificationCenter.default.publisher(for: .widgetsAddRequested)) { _ in
                 guard isEditing else { return }
                 addPageSnapshot = currentPage
@@ -175,9 +232,7 @@ struct WidgetsPagerView: View {
             .sheet(isPresented: $showingAddSheet) {
                 AddWidgetsSheet(
                     hiddenWidgets: widgets.filter { $0.isHidden },
-                    onAdd: { kind in
-                        addWidget(kind: kind, preferredPage: addPageSnapshot)
-                    }
+                    onAdd: { kind in addWidget(kind: kind, preferredPage: addPageSnapshot) }
                 )
                 .presentationDetents([.medium, .large])
             }
@@ -188,6 +243,7 @@ struct WidgetsPagerView: View {
         }
     }
 
+    // (کۆدەکانی pageContainer و addWidget و loadWidgets و saveWidgets وەک خۆیان دەمێننەوە...)
     private func pageContainer(page: Int) -> some View {
         let items = pageWidgets(page)
         let noWidgetsAnywhere = visibleWidgets.isEmpty
@@ -400,321 +456,31 @@ struct EmptyAllWidgetsView: View {
     let onAdd: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 34, weight: .semibold))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.secondary)
+        VStack(spacing: 16) {
+            Image(systemName: "square.dashed")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.blue.opacity(0.6))
 
-            Text("No widgets")
-                .font(.system(size: 17, weight: .semibold))
+            Text("No widgets here")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(.secondary)
 
             Button(action: onAdd) {
                 Text("Add Widgets")
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial, in: Capsule())
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color.blue, in: Capsule())
+                    .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
             }
         }
         .frame(maxWidth: .infinity)
+        .padding(.top, 40)
     }
 }
 
-struct WidgetsGridView: View {
-    @Binding var widgets: [WidgetState]
-    @Binding var draggingID: UUID?
-    @Binding var isEditing: Bool
-
-    let page: Int
-    let visibleWidgets: [WidgetState]
-    let lockedKinds: Set<WidgetKind>
-
-    let hPadding: CGFloat
-    let spacing: CGFloat
-    let baseHeight: CGFloat
-    let gridMax: CGFloat
-
-    let onCommit: () -> Void
-
-    var body: some View {
-        TwoColumnWidgetLayout(
-            spacing: spacing,
-            hPadding: hPadding,
-            baseHeight: baseHeight,
-            maxWidth: gridMax
-        ) {
-            ForEach(visibleWidgets) { w in
-                widgetView(w)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .onDrop(of: [UTType.text], isTargeted: nil) { _ in
-            draggingID = nil
-            onCommit()
-            return true
-        }
-    }
-
-    private func widgetView(_ widget: WidgetState) -> some View {
-        let isLocked = lockedKinds.contains(widget.kind)
-        let portalNoLarge = widget.kind == .portalVersion
-        let guidesNoSmall = widget.kind == .guides
-
-        return WidgetCard(
-            title: widget.title,
-            kind: widget.kind,
-            isEditing: isEditing,
-            size: widget.size,
-            isDragging: draggingID == widget.id,
-            isSizeLocked: isLocked,
-            portalRestrictNoLarge: portalNoLarge,
-            guidesRestrictNoSmall: guidesNoSmall,
-            onRemove: { hideWidget(widgetID: widget.id) },
-            onSetSize: { newSize in setSize(widgetID: widget.id, size: newSize) },
-            onTap: {
-                if !isEditing {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                }
-            }
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .layoutValue(key: WidgetSpanKey.self, value: .init(spanX: widget.size.spanX, spanY: widget.size.spanY))
-        .onLongPressGesture(minimumDuration: 0.35) {
-            if !isEditing {
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.92)) {
-                    isEditing = true
-                }
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            }
-        }
-        .modifier(
-            WidgetDragDropModifier(
-                widget: widget,
-                isEditing: isEditing,
-                widgets: $widgets,
-                draggingID: $draggingID,
-                onCommit: onCommit
-            )
-        )
-    }
-
-    private func setSize(widgetID: UUID, size: WidgetSize) {
-        guard let idx = widgets.firstIndex(where: { $0.id == widgetID }) else { return }
-        let kind = widgets[idx].kind
-
-        if lockedKinds.contains(kind) {
-            widgets[idx].size = .small
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            onCommit()
-            return
-        }
-
-        if kind == .portalVersion, size == .large {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            return
-        }
-
-        if kind == .guides, size == .small {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            return
-        }
-
-        widgets[idx].size = size
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        onCommit()
-    }
-
-    private func hideWidget(widgetID: UUID) {
-        guard let idx = widgets.firstIndex(where: { $0.id == widgetID }) else { return }
-        widgets[idx].isHidden = true
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        onCommit()
-    }
-}
-
-struct WidgetSpan: Equatable { var spanX: Int; var spanY: Int }
-struct WidgetSpanKey: LayoutValueKey { static var defaultValue: WidgetSpan = .init(spanX: 1, spanY: 1) }
-
-struct PlacedItem { var index: Int; var row: Int; var col: Int; var spanX: Int; var spanY: Int }
-
-struct TwoColumnWidgetLayout: Layout {
-    typealias Cache = [PlacedItem]
-
-    var spacing: CGFloat
-    var hPadding: CGFloat
-    var baseHeight: CGFloat
-    var maxWidth: CGFloat
-
-    func makeCache(subviews: Subviews) -> Cache { [] }
-    func updateCache(_ cache: inout Cache, subviews: Subviews) { }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
-        let w0 = proposal.width ?? UIScreen.main.bounds.width
-        let effectiveWidth = min(w0, maxWidth)
-        let rowStep = baseHeight + spacing
-
-        cache.removeAll(keepingCapacity: true)
-
-        var occ: [[Bool]] = []
-        func ensureRows(_ r: Int) { while occ.count <= r { occ.append([false, false]) } }
-        func canPlace(row r: Int, col c: Int, spanX: Int, spanY: Int) -> Bool {
-            ensureRows(r + spanY - 1)
-            if spanX == 2 && c != 0 { return false }
-            if c < 0 || c > 1 { return false }
-            for yy in 0..<spanY {
-                for xx in 0..<spanX {
-                    let rr = r + yy
-                    let cc = c + xx
-                    if cc > 1 { return false }
-                    if occ[rr][cc] { return false }
-                }
-            }
-            return true
-        }
-        func mark(row r: Int, col c: Int, spanX: Int, spanY: Int) {
-            ensureRows(r + spanY - 1)
-            for yy in 0..<spanY { for xx in 0..<spanX { occ[r + yy][c + xx] = true } }
-        }
-
-        for i in subviews.indices {
-            let span = subviews[i][WidgetSpanKey.self]
-            let spanX = max(1, min(2, span.spanX))
-            let spanY = max(1, min(2, span.spanY))
-
-            var placed = false
-            var r = 0
-
-            while !placed {
-                ensureRows(r)
-                if spanX == 2 {
-                    if canPlace(row: r, col: 0, spanX: 2, spanY: spanY) {
-                        mark(row: r, col: 0, spanX: 2, spanY: spanY)
-                        cache.append(.init(index: i, row: r, col: 0, spanX: 2, spanY: spanY))
-                        placed = true
-                    } else { r += 1 }
-                } else {
-                    if canPlace(row: r, col: 0, spanX: 1, spanY: spanY) {
-                        mark(row: r, col: 0, spanX: 1, spanY: spanY)
-                        cache.append(.init(index: i, row: r, col: 0, spanX: 1, spanY: spanY))
-                        placed = true
-                    } else if canPlace(row: r, col: 1, spanX: 1, spanY: spanY) {
-                        mark(row: r, col: 1, spanX: 1, spanY: spanY)
-                        cache.append(.init(index: i, row: r, col: 1, spanX: 1, spanY: spanY))
-                        placed = true
-                    } else { r += 1 }
-                }
-            }
-        }
-
-        var maxBottom: CGFloat = 0
-        for item in cache {
-            let y = CGFloat(item.row) * rowStep
-            let height = CGFloat(item.spanY) * baseHeight + CGFloat(item.spanY - 1) * spacing
-            maxBottom = max(maxBottom, y + height)
-        }
-
-        return CGSize(width: effectiveWidth, height: maxBottom)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
-        let effectiveWidth = min(bounds.width, maxWidth)
-        let innerWidth = max(0, effectiveWidth - (hPadding * 2))
-        let colWidth = (innerWidth - spacing) / 2
-        let rowStep = baseHeight + spacing
-
-        let originX = bounds.minX + (bounds.width - effectiveWidth) / 2 + hPadding
-        let originY = bounds.minY
-
-        for item in cache {
-            let x = originX + CGFloat(item.col) * (colWidth + spacing)
-            let y = originY + CGFloat(item.row) * rowStep
-            let width = item.spanX == 2 ? (colWidth * 2 + spacing) : colWidth
-            let height = CGFloat(item.spanY) * baseHeight + CGFloat(item.spanY - 1) * spacing
-
-            subviews[item.index].place(
-                at: CGPoint(x: x, y: y),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(width: width, height: height)
-            )
-        }
-    }
-}
-
-struct WidgetDragDropModifier: ViewModifier {
-    let widget: WidgetState
-    let isEditing: Bool
-    @Binding var widgets: [WidgetState]
-    @Binding var draggingID: UUID?
-    let onCommit: () -> Void
-
-    func body(content: Content) -> some View {
-        if !isEditing {
-            content
-        } else {
-            content
-                .transaction { $0.animation = nil }
-                .opacity(draggingID == widget.id ? 0 : 1)
-                .onDrag {
-                    draggingID = widget.id
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    return NSItemProvider(object: widget.id.uuidString as NSString)
-                } preview: {
-                    Color.clear.frame(width: 1, height: 1).opacity(0.0001)
-                }
-                .onDrop(
-                    of: [UTType.text],
-                    delegate: WidgetDropDelegate(
-                        targetID: widget.id,
-                        widgets: $widgets,
-                        draggingID: $draggingID,
-                        onCommit: onCommit
-                    )
-                )
-        }
-    }
-}
-
-struct WidgetDropDelegate: DropDelegate {
-    let targetID: UUID
-    @Binding var widgets: [WidgetState]
-    @Binding var draggingID: UUID?
-    let onCommit: () -> Void
-
-    func dropEntered(info: DropInfo) {
-        guard let fromID = draggingID, fromID != targetID else { return }
-        guard let fromIndex = widgets.firstIndex(where: { $0.id == fromID }),
-              let toIndex = widgets.firstIndex(where: { $0.id == targetID }) else { return }
-
-        let page = widgets[toIndex].page
-        if widgets[fromIndex].page != page { return }
-
-        if fromIndex == toIndex { return }
-
-        withAnimation(.spring(response: 0.20, dampingFraction: 0.92)) {
-            let item = widgets.remove(at: fromIndex)
-            widgets.insert(item, at: toIndex)
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggingID = nil
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        onCommit()
-        return true
-    }
-
-    func dropEnded(info: DropInfo) {
-        draggingID = nil
-        onCommit()
-    }
-}
-
+// MARK: - دیزاینی نوێی کارتەکان (گۆڕانکاری بۆ مۆدێرن)
 struct WidgetCard: View {
     let title: String
     let kind: WidgetKind
@@ -730,67 +496,229 @@ struct WidgetCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .lineLimit(1)
+            // پاشخانی کارتەکە بە شێوازی مۆدێرن
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+            
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                    Spacer()
+                    
+                    // ئایکۆنێک بۆ دیاریکردنی جۆری ویجێتەکە
+                    Image(systemName: iconForKind(kind))
+                        .foregroundStyle(.blue.opacity(0.8))
+                        .font(.system(size: 16, weight: .semibold))
+                }
 
                 Text(kind.descriptionText(size: size))
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: 14, weight: .regular))
                     .foregroundStyle(.secondary)
-                    .lineLimit(size.spanY == 2 ? 6 : 3)
+                    .lineLimit(size.spanY == 2 ? 6 : 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)
             }
-            .padding(16)
+            .padding(18)
 
             if isEditing {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Menu {
                         if !isSizeLocked {
-                            if !guidesRestrictNoSmall {
-                                Button("Small") { onSetSize(.small) }
-                            }
+                            if !guidesRestrictNoSmall { Button("Small") { onSetSize(.small) } }
                             Button("Wide") { onSetSize(.wide) }
                             Button("Tall") { onSetSize(.tall) }
-                            if !portalRestrictNoLarge {
-                                Button("Large") { onSetSize(.large) }
-                            }
+                            if !portalRestrictNoLarge { Button("Large") { onSetSize(.large) } }
                         }
                     } label: {
-                        Image(systemName: "rectangle.grid.2x2")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(10)
-                            .background(.thinMaterial, in: Circle())
+                        Image(systemName: "aspectratio")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(12)
+                            .background(Color.blue.opacity(0.8), in: Circle())
                     }
                     .buttonStyle(.plain)
 
                     Button(action: onRemove) {
-                        Image(systemName: "minus")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(10)
-                            .background(.thinMaterial, in: Circle())
+                        Image(systemName: "trash.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(12)
+                            .background(Color.red.opacity(0.8), in: Circle())
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(12)
+                .padding(14)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color(uiColor: .separator), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(isDragging ? 0.04 : 0.08), radius: isDragging ? 8 : 16, x: 0, y: isDragging ? 3 : 8)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        // سێبەری مۆدێرن (Soft UI)
+        .shadow(color: Color.black.opacity(isDragging ? 0.08 : 0.04), radius: isDragging ? 12 : 16, x: 0, y: isDragging ? 6 : 8)
+        .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .onTapGesture { onTap() }
     }
+    
+    // فەنکشنێک بۆ دانانی ئایکۆنی گونجاو بۆ هەر جۆرێک
+    private func iconForKind(_ kind: WidgetKind) -> String {
+        switch kind {
+        case .guides: return "book.fill"
+        case .stats: return "chart.bar.fill"
+        case .updates: return "arrow.triangle.2.circlepath"
+        case .recent: return "clock.fill"
+        case .sourceApps: return "apps.iphone"
+        case .portalVersion: return "server.rack"
+        case .deviceStats: return "iphone.gen3"
+        case .time: return "timer"
+        case .socialMedia: return "network" // ئایکۆنی نوێ
+        }
+    }
+}
+
+// (کۆدەکانی WidgetsGridView, TwoColumnWidgetLayout، WidgetDragDropModifier وەک خۆیان دەمێننەوە. لێرە تەنها شتە نوێیەکان و جۆرەکان دادەنێم بۆ کورتی)
+
+struct WidgetsGridView: View {
+    @Binding var widgets: [WidgetState]
+    @Binding var draggingID: UUID?
+    @Binding var isEditing: Bool
+    let page: Int
+    let visibleWidgets: [WidgetState]
+    let lockedKinds: Set<WidgetKind>
+    let hPadding: CGFloat
+    let spacing: CGFloat
+    let baseHeight: CGFloat
+    let gridMax: CGFloat
+    let onCommit: () -> Void
+
+    var body: some View {
+        TwoColumnWidgetLayout(spacing: spacing, hPadding: hPadding, baseHeight: baseHeight, maxWidth: gridMax) {
+            ForEach(visibleWidgets) { w in widgetView(w) }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .onDrop(of: [UTType.text], isTargeted: nil) { _ in
+            draggingID = nil
+            onCommit()
+            return true
+        }
+    }
+
+    private func widgetView(_ widget: WidgetState) -> some View {
+        let isLocked = lockedKinds.contains(widget.kind)
+        let portalNoLarge = widget.kind == .portalVersion
+        let guidesNoSmall = widget.kind == .guides
+
+        return WidgetCard(
+            title: widget.title, kind: widget.kind, isEditing: isEditing, size: widget.size, isDragging: draggingID == widget.id, isSizeLocked: isLocked, portalRestrictNoLarge: portalNoLarge, guidesRestrictNoSmall: guidesNoSmall,
+            onRemove: { hideWidget(widgetID: widget.id) },
+            onSetSize: { newSize in setSize(widgetID: widget.id, size: newSize) },
+            onTap: { if !isEditing { UIImpactFeedbackGenerator(style: .light).impactOccurred() } }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .layoutValue(key: WidgetSpanKey.self, value: .init(spanX: widget.size.spanX, spanY: widget.size.spanY))
+        .onLongPressGesture(minimumDuration: 0.35) {
+            if !isEditing {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { isEditing = true }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
+        }
+        .modifier(WidgetDragDropModifier(widget: widget, isEditing: isEditing, widgets: $widgets, draggingID: $draggingID, onCommit: onCommit))
+    }
+
+    private func setSize(widgetID: UUID, size: WidgetSize) {
+        guard let idx = widgets.firstIndex(where: { $0.id == widgetID }) else { return }
+        let kind = widgets[idx].kind
+        if lockedKinds.contains(kind) { widgets[idx].size = .small; UIImpactFeedbackGenerator(style: .light).impactOccurred(); onCommit(); return }
+        if kind == .portalVersion, size == .large { UIImpactFeedbackGenerator(style: .light).impactOccurred(); return }
+        if kind == .guides, size == .small { UIImpactFeedbackGenerator(style: .light).impactOccurred(); return }
+        widgets[idx].size = size; UIImpactFeedbackGenerator(style: .light).impactOccurred(); onCommit()
+    }
+
+    private func hideWidget(widgetID: UUID) {
+        guard let idx = widgets.firstIndex(where: { $0.id == widgetID }) else { return }
+        widgets[idx].isHidden = true; UIImpactFeedbackGenerator(style: .light).impactOccurred(); onCommit()
+    }
+}
+
+struct WidgetSpan: Equatable { var spanX: Int; var spanY: Int }
+struct WidgetSpanKey: LayoutValueKey { static var defaultValue: WidgetSpan = .init(spanX: 1, spanY: 1) }
+struct PlacedItem { var index: Int; var row: Int; var col: Int; var spanX: Int; var spanY: Int }
+
+struct TwoColumnWidgetLayout: Layout {
+    typealias Cache = [PlacedItem]
+    var spacing: CGFloat
+    var hPadding: CGFloat
+    var baseHeight: CGFloat
+    var maxWidth: CGFloat
+    func makeCache(subviews: Subviews) -> Cache { [] }
+    func updateCache(_ cache: inout Cache, subviews: Subviews) { }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+        let w0 = proposal.width ?? UIScreen.main.bounds.width
+        let effectiveWidth = min(w0, maxWidth)
+        let rowStep = baseHeight + spacing
+        cache.removeAll(keepingCapacity: true)
+        var occ: [[Bool]] = []
+        func ensureRows(_ r: Int) { while occ.count <= r { occ.append([false, false]) } }
+        func canPlace(row r: Int, col c: Int, spanX: Int, spanY: Int) -> Bool {
+            ensureRows(r + spanY - 1)
+            if spanX == 2 && c != 0 { return false }
+            if c < 0 || c > 1 { return false }
+            for yy in 0..<spanY { for xx in 0..<spanX { let rr = r + yy; let cc = c + xx; if cc > 1 { return false }; if occ[rr][cc] { return false } } }
+            return true
+        }
+        func mark(row r: Int, col c: Int, spanX: Int, spanY: Int) { ensureRows(r + spanY - 1); for yy in 0..<spanY { for xx in 0..<spanX { occ[r + yy][c + xx] = true } } }
+        for i in subviews.indices {
+            let span = subviews[i][WidgetSpanKey.self]
+            let spanX = max(1, min(2, span.spanX)); let spanY = max(1, min(2, span.spanY))
+            var placed = false; var r = 0
+            while !placed {
+                ensureRows(r)
+                if spanX == 2 {
+                    if canPlace(row: r, col: 0, spanX: 2, spanY: spanY) { mark(row: r, col: 0, spanX: 2, spanY: spanY); cache.append(.init(index: i, row: r, col: 0, spanX: 2, spanY: spanY)); placed = true } else { r += 1 }
+                } else {
+                    if canPlace(row: r, col: 0, spanX: 1, spanY: spanY) { mark(row: r, col: 0, spanX: 1, spanY: spanY); cache.append(.init(index: i, row: r, col: 0, spanX: 1, spanY: spanY)); placed = true }
+                    else if canPlace(row: r, col: 1, spanX: 1, spanY: spanY) { mark(row: r, col: 1, spanX: 1, spanY: spanY); cache.append(.init(index: i, row: r, col: 1, spanX: 1, spanY: spanY)); placed = true }
+                    else { r += 1 }
+                }
+            }
+        }
+        var maxBottom: CGFloat = 0
+        for item in cache { let y = CGFloat(item.row) * rowStep; let height = CGFloat(item.spanY) * baseHeight + CGFloat(item.spanY - 1) * spacing; maxBottom = max(maxBottom, y + height) }
+        return CGSize(width: effectiveWidth, height: maxBottom)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let effectiveWidth = min(bounds.width, maxWidth); let innerWidth = max(0, effectiveWidth - (hPadding * 2)); let colWidth = (innerWidth - spacing) / 2; let rowStep = baseHeight + spacing
+        let originX = bounds.minX + (bounds.width - effectiveWidth) / 2 + hPadding; let originY = bounds.minY
+        for item in cache {
+            let x = originX + CGFloat(item.col) * (colWidth + spacing); let y = originY + CGFloat(item.row) * rowStep; let width = item.spanX == 2 ? (colWidth * 2 + spacing) : colWidth; let height = CGFloat(item.spanY) * baseHeight + CGFloat(item.spanY - 1) * spacing
+            subviews[item.index].place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: width, height: height))
+        }
+    }
+}
+
+struct WidgetDragDropModifier: ViewModifier {
+    let widget: WidgetState; let isEditing: Bool; @Binding var widgets: [WidgetState]; @Binding var draggingID: UUID?; let onCommit: () -> Void
+    func body(content: Content) -> some View {
+        if !isEditing { content } else {
+            content.transaction { $0.animation = nil }.opacity(draggingID == widget.id ? 0 : 1).onDrag {
+                draggingID = widget.id; UIImpactFeedbackGenerator(style: .light).impactOccurred(); return NSItemProvider(object: widget.id.uuidString as NSString)
+            } preview: { Color.clear.frame(width: 1, height: 1).opacity(0.0001) }.onDrop(of: [UTType.text], delegate: WidgetDropDelegate(targetID: widget.id, widgets: $widgets, draggingID: $draggingID, onCommit: onCommit))
+        }
+    }
+}
+
+struct WidgetDropDelegate: DropDelegate {
+    let targetID: UUID; @Binding var widgets: [WidgetState]; @Binding var draggingID: UUID?; let onCommit: () -> Void
+    func dropEntered(info: DropInfo) {
+        guard let fromID = draggingID, fromID != targetID else { return }
+        guard let fromIndex = widgets.firstIndex(where: { $0.id == fromID }), let toIndex = widgets.firstIndex(where: { $0.id == targetID }) else { return }
+        if widgets[fromIndex].page != widgets[toIndex].page { return }
+        if fromIndex == toIndex { return }
+        withAnimation(.spring(response: 0.20, dampingFraction: 0.92)) { let item = widgets.remove(at: fromIndex); widgets.insert(item, at: toIndex) }
+    }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+    func performDrop(info: DropInfo) -> Bool { draggingID = nil; UIImpactFeedbackGenerator(style: .medium).impactOccurred(); onCommit(); return true }
+    func dropEnded(info: DropInfo) { draggingID = nil; onCommit() }
 }
 
 struct AddWidgetsSheet: View {
@@ -802,103 +730,51 @@ struct AddWidgetsSheet: View {
         NavigationView {
             List {
                 if hiddenWidgets.isEmpty {
-                    Text("Nothing to add right now.")
-                        .foregroundStyle(.secondary)
+                    Text("Nothing to add right now.").foregroundStyle(.secondary)
                 } else {
                     ForEach(hiddenWidgets) { w in
-                        Button {
-                            onAdd(w.kind)
-                        } label: {
-                            HStack {
-                                Text(w.title)
-                                Spacer()
-                                Image(systemName: "plus.circle.fill")
-                                    .symbolRenderingMode(.hierarchical)
-                            }
-                        }
+                        Button { onAdd(w.kind) } label: { HStack { Text(w.title); Spacer(); Image(systemName: "plus.circle.fill").foregroundStyle(.blue) } }
                     }
                 }
             }
             .navigationTitle("Add Widgets")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() }.fontWeight(.bold) } }
         }
     }
 }
 
 enum WidgetSize: String, Codable, CaseIterable {
-    case small
-    case wide
-    case tall
-    case large
-
-    var spanX: Int {
-        switch self {
-        case .small: return 1
-        case .wide: return 2
-        case .tall: return 1
-        case .large: return 2
-        }
-    }
-
-    var spanY: Int {
-        switch self {
-        case .small: return 1
-        case .wide: return 1
-        case .tall: return 2
-        case .large: return 2
-        }
-    }
+    case small, wide, tall, large
+    var spanX: Int { switch self { case .small, .tall: return 1; case .wide, .large: return 2 } }
+    var spanY: Int { switch self { case .small, .wide: return 1; case .tall, .large: return 2 } }
 }
 
+// MARK: - زیادکردنی جۆری سۆشیاڵ میدیا بۆ ناو ویجێتەکان
 enum WidgetKind: String, Codable, CaseIterable {
-    case guides
-    case stats
-    case updates
-    case recent
-    case sourceApps
-    case portalVersion
-    case deviceStats
-    case time
+    case guides, stats, updates, recent, sourceApps, portalVersion, deviceStats, time
+    case socialMedia // ← جۆرە نوێیەکە
 
     func descriptionText(size: WidgetSize) -> String {
         switch self {
         case .guides: return size.spanY == 2 ? "Tap for guides, tips, and helpful explanations." : "Tap for informational guides."
-        case .stats: return size.spanY == 2 ? "Stats widget placeholder (tall)." : "Stats widget placeholder."
-        case .updates: return size.spanY == 2 ? "Updates widget placeholder (tall)." : "Updates widget placeholder."
-        case .recent: return size.spanY == 2 ? "Recent widget placeholder (tall)." : "Recent widget placeholder."
-        case .sourceApps: return size.spanY == 2 ? "Source Apps widget placeholder (tall)." : "Source Apps widget placeholder."
-        case .portalVersion: return size.spanY == 2 ? "Portal Version widget placeholder (tall)." : "Portal Version widget placeholder."
-        case .deviceStats: return size.spanY == 2 ? "Device Stats widget placeholder (tall)." : "Device Stats widget placeholder."
-        case .time: return size.spanY == 2 ? "Time widget placeholder (tall)." : "Time widget placeholder."
+        case .stats: return "Stats widget placeholder."
+        case .updates: return "Updates widget placeholder."
+        case .recent: return "Recent widget placeholder."
+        case .sourceApps: return "Source Apps widget placeholder."
+        case .portalVersion: return "Portal Version widget placeholder."
+        case .deviceStats: return "Device Stats widget placeholder."
+        case .time: return "Time widget placeholder."
+        case .socialMedia: return "Your connected social profiles." // پەیامی جۆرە نوێیەکە
         }
     }
 }
 
 struct WidgetState: Identifiable, Codable, Equatable {
-    var id: UUID
-    var kind: WidgetKind
-    var title: String
-    var size: WidgetSize
-    var isHidden: Bool
-    var page: Int
-
+    var id: UUID; var kind: WidgetKind; var title: String; var size: WidgetSize; var isHidden: Bool; var page: Int
     init(id: UUID, kind: WidgetKind, title: String, size: WidgetSize, isHidden: Bool = false, page: Int = 0) {
-        self.id = id
-        self.kind = kind
-        self.title = title
-        self.size = size
-        self.isHidden = isHidden
-        self.page = page
+        self.id = id; self.kind = kind; self.title = title; self.size = size; self.isHidden = isHidden; self.page = page
     }
-
-    enum CodingKeys: String, CodingKey {
-        case id, kind, title, size, isHidden, isBig, page
-    }
-
+    enum CodingKeys: String, CodingKey { case id, kind, title, size, isHidden, isBig, page }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
@@ -906,29 +782,19 @@ struct WidgetState: Identifiable, Codable, Equatable {
         title = (try? c.decode(String.self, forKey: .title)) ?? "Widget"
         isHidden = (try? c.decode(Bool.self, forKey: .isHidden)) ?? false
         page = (try? c.decode(Int.self, forKey: .page)) ?? 0
-
-        if let size = try? c.decode(WidgetSize.self, forKey: .size) {
-            self.size = size
-        } else if (try? c.decode(Bool.self, forKey: .isBig)) == true {
-            self.size = .large
-        } else {
-            self.size = .small
-        }
+        if let size = try? c.decode(WidgetSize.self, forKey: .size) { self.size = size }
+        else if (try? c.decode(Bool.self, forKey: .isBig)) == true { self.size = .large }
+        else { self.size = .small }
     }
-
     func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(id, forKey: .id)
-        try c.encode(kind, forKey: .kind)
-        try c.encode(title, forKey: .title)
-        try c.encode(size, forKey: .size)
-        try c.encode(isHidden, forKey: .isHidden)
-        try c.encode(page, forKey: .page)
+        var c = encoder.container(keyedBy: CodingKeys.self); try c.encode(id, forKey: .id); try c.encode(kind, forKey: .kind); try c.encode(title, forKey: .title); try c.encode(size, forKey: .size); try c.encode(isHidden, forKey: .isHidden); try c.encode(page, forKey: .page)
     }
 
+    // MARK: - لێرەدا ویجێتی Socials ـم بۆ ڕیزبەندییە سەرەتاییەکە زیاد کردووە
     static var defaultWidgets: [WidgetState] {
         [
             .init(id: UUID(), kind: .guides, title: "Guides", size: .wide, page: 0),
+            .init(id: UUID(), kind: .socialMedia, title: "Socials", size: .small, page: 0), // ← ویجێتە نوێیەکە پێشان دەدرێت
             .init(id: UUID(), kind: .stats, title: "Stats", size: .small, page: 0),
             .init(id: UUID(), kind: .updates, title: "Updates", size: .small, page: 0),
             .init(id: UUID(), kind: .recent, title: "Recent", size: .small, page: 0),
