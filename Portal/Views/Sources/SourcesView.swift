@@ -6,6 +6,7 @@
 import SwiftUI
 import NimbleViews
 import Foundation
+import UIKit // 👈 ئەمە زیادکرا بۆ ناسینەوەی فەرمانەکانی سیستەم
 
 // ١. مۆدێلی ئەپەکان
 struct AshteApp: Codable, Identifiable {
@@ -17,7 +18,7 @@ struct AshteApp: Codable, Identifiable {
     let size: String?
     let developer: String?
     let bundle: String?
-    let url: String // لینکی Base64
+    let url: String
 
     var fullImageURL: URL? {
         guard let img = image else { return nil }
@@ -25,45 +26,39 @@ struct AshteApp: Codable, Identifiable {
     }
 }
 
-// ٢. بەڕێوەبەری دابەزاندن بۆ زانینی قەبارە و کاتی داونلۆدکردن بە شێوەی App Store
-class AppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
-    @Published var progress: Double = 0
+// ٢. بەڕێوەبەری دابەزاندن
+class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
+    @Published var progress: CGFloat = 0
     @Published var isDownloading = false
     @Published var isFinished = false
     
     private var downloadTask: URLSessionDownloadTask?
+    private var session: URLSession?
     private var downloadURL: URL?
     private var onFinished: ((URL) -> Void)?
     
     func start(url: URL, onFinished: @escaping (URL) -> Void) {
         self.downloadURL = url
         self.onFinished = onFinished
+        self.isDownloading = true
+        self.progress = 0
+        self.isFinished = false
         
-        DispatchQueue.main.async {
-            self.isDownloading = true
-            self.progress = 0
-            self.isFinished = false
-        }
-        
-        let session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
-        downloadTask = session.downloadTask(with: url)
+        self.session = URLSession(configuration: .default, delegate: self, delegateQueue: OperationQueue.main)
+        downloadTask = session?.downloadTask(with: url)
         downloadTask?.resume()
     }
     
     func stop() {
         downloadTask?.cancel()
-        DispatchQueue.main.async {
-            self.isDownloading = false
-            self.progress = 0
-        }
+        session?.invalidateAndCancel()
+        self.isDownloading = false
+        self.progress = 0
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        DispatchQueue.main.async {
-            if totalBytesExpectedToWrite > 0 {
-                // پێوانەکردنی قەبارەی داونلۆدکراو بۆ پڕکردنەوەی بازنەکە
-                self.progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-            }
+        if totalBytesExpectedToWrite > 0 {
+            self.progress = CGFloat(totalBytesWritten) / CGFloat(totalBytesExpectedToWrite)
         }
     }
     
@@ -75,38 +70,37 @@ class AppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
         try? FileManager.default.removeItem(at: destinationURL)
         do {
             try FileManager.default.copyItem(at: location, to: destinationURL)
-            DispatchQueue.main.async {
-                self.isDownloading = false
-                self.isFinished = true
-                self.onFinished?(destinationURL)
-            }
+            self.isDownloading = false
+            self.isFinished = true
+            self.onFinished?(destinationURL)
         } catch {
-            DispatchQueue.main.async { self.isDownloading = false }
+            self.isDownloading = false
         }
+        session.finishTasksAndInvalidate()
     }
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if error != nil {
-            DispatchQueue.main.async { self.isDownloading = false }
+            self.isDownloading = false
         }
+        session.finishTasksAndInvalidate()
     }
 }
 
-// ٣. دیزاینی دوگمەی Get کە شێوەی دەگۆڕێت بۆ بازنەی App Store
-struct DownloadButtonView: View {
+// ٣. دیزاینی دوگمەی Get
+struct AshteDownloadButtonView: View {
     let app: AshteApp
     @ObservedObject var downloadManager: DownloadManager
-    @StateObject private var downloader = AppDownloader()
+    @StateObject private var downloader = AshteAppDownloader()
     
     var body: some View {
         HStack(alignment: .center) {
             Spacer()
             
             if downloader.isFinished {
-                // دۆخی تەواوبوون (نیشانەی ڕاست)
                 Button(action: {}) {
                     Image(systemName: "checkmark")
-                        .font(.subheadline).bold()
+                        .font(.subheadline.weight(.bold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
                         .background(Color.blue.opacity(0.15))
@@ -115,7 +109,6 @@ struct DownloadButtonView: View {
                 }
                 .disabled(true)
             } else if downloader.isDownloading {
-                // دۆخی داونلۆدکردن (بازنەی خولاوە و پڕبوونەوە)
                 ZStack {
                     Circle()
                         .stroke(Color.gray.opacity(0.3), lineWidth: 3)
@@ -129,12 +122,10 @@ struct DownloadButtonView: View {
                             .frame(width: 28, height: 28)
                             .animation(.linear(duration: 0.2), value: downloader.progress)
                     } else {
-                        // پێش ئەوەی دەست پێبکات با کەمێک بسوڕێتەوە
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
                     }
                     
-                    // دوگمەی وەستان لە ناوەڕاستی بازنەکەدا
                     RoundedRectangle(cornerRadius: 3)
                         .fill(Color.blue)
                         .frame(width: 10, height: 10)
@@ -144,7 +135,6 @@ struct DownloadButtonView: View {
                 }
                 .frame(width: 50, height: 35, alignment: .center)
             } else {
-                // دۆخی ئاسایی (دوگمەی Get)
                 Button(action: {
                     if let decodedData = Data(base64Encoded: app.url),
                        let decodedString = String(data: decodedData, encoding: .utf8),
@@ -153,7 +143,6 @@ struct DownloadButtonView: View {
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                         
-                        // دەستپێکردنی داونلۆد و دواتر ناردنی بۆ Library
                         downloader.start(url: downloadURL) { localURL in
                             _ = downloadManager.startDownload(from: localURL)
                         }
@@ -171,11 +160,11 @@ struct DownloadButtonView: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(width: 80, alignment: .trailing) // بۆ ئەوەی دوگمەکە جێگەی خۆی نەگۆڕێت
+        .frame(width: 80, alignment: .trailing)
     }
 }
 
-// ٤. ڕووکاری سەرەکی بۆ نیشاندانی ئەپەکان
+// ٤. ڕووکاری سەرەکی 
 struct SourcesView: View {
     @StateObject var downloadManager = DownloadManager.shared 
     @State private var apps: [AshteApp] = []
@@ -208,7 +197,6 @@ struct SourcesView: View {
                     NBSection("Apps") {
                         ForEach(filteredApps) { app in
                             HStack(spacing: 16) {
-                                // وێنەی ئەپەکە
                                 AsyncImage(url: app.fullImageURL) { image in
                                     image.resizable()
                                          .aspectRatio(contentMode: .fill)
@@ -218,7 +206,6 @@ struct SourcesView: View {
                                 .frame(width: 55, height: 55)
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 
-                                // زانیارییەکانی ئەپەکە
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(app.name)
                                         .font(.headline)
@@ -226,11 +213,9 @@ struct SourcesView: View {
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
-                                
                                 Spacer()
                                 
-                                // 👈 بەکارهێنانی دوگمە نوێیەکە (App Store Style)
-                                DownloadButtonView(app: app, downloadManager: downloadManager)
+                                AshteDownloadButtonView(app: app, downloadManager: downloadManager)
                             }
                             .padding(.vertical, 4)
                         }
@@ -239,35 +224,35 @@ struct SourcesView: View {
             }
             .searchable(text: $searchText, placement: .platform())
             .refreshable {
-                loadApps()
+                await loadApps() // 👈 ئێستا بێ کێشە کار دەکات
             }
         }
         .onAppear {
-            loadApps()
+            Task {
+                await loadApps()
+            }
         }
     }
     
-    // فرمانی هێنانی فایلی ipa.json لە سێرڤەرەکەتەوە
-    private func loadApps() {
-        isLoading = true
+    // ٥. فەرمانی هێنان و نوێکردنەوە (بەشێوازی ئەسینک)
+    private func loadApps() async {
+        DispatchQueue.main.async { isLoading = true }
         
         guard let url = URL(string: "https://ashtemobile.tututweak.com/ipa.json") else {
-            isLoading = false
+            DispatchQueue.main.async { isLoading = false }
             return
         }
         
-        URLSession.shared.dataTask(with: url) { data, response, error in
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decodedApps = try JSONDecoder().decode([AshteApp].self, from: data)
             DispatchQueue.main.async {
+                self.apps = decodedApps
                 self.isLoading = false
-                if let data = data {
-                    do {
-                        let decodedApps = try JSONDecoder().decode([AshteApp].self, from: data)
-                        self.apps = decodedApps
-                    } catch {
-                        print("Error decoding ipa.json: \(error)")
-                    }
-                }
             }
-        }.resume()
+        } catch {
+            print("Error decoding ipa.json: \(error)")
+            DispatchQueue.main.async { self.isLoading = false }
+        }
     }
 }
