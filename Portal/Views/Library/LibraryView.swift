@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreData
 import NimbleViews
+import UniformTypeIdentifiers // 👈 ئەمە زیاد کرا بۆ ناسینەوەی جۆری فایلەکان
 
 struct LibraryView: View {
     @StateObject var downloadManager = DownloadManager.shared
@@ -81,7 +82,7 @@ struct LibraryView: View {
             .toolbar {
                 NBToolbarMenu(systemImage: "plus", style: .icon, placement: .topBarTrailing) {
                     Button(.localized("Import from Files"), systemImage: "folder") {
-                        _isImportingPresenting = true
+                        _isImportingPresenting = true // 👈 ئەمە ئێستا کار بە fileImporter دەکات
                     }
                     Button(.localized("Import from URL"), systemImage: "globe") {
                         _isDownloadingPresenting = true
@@ -99,6 +100,31 @@ struct LibraryView: View {
             .fullScreenCover(item: $_selectedSigningAppPresenting) { app in
                 SigningView(app: app.base)
                     .compatNavigationTransition(id: app.base.uuid ?? "", ns: _namespace)
+            }
+            // 🔴 ئەم بەشەی خوارەوە بەتەواوی نوێیە و بەرپرسە لە کردنەوەی فایلەکان
+            .fileImporter(
+                isPresented: $_isImportingPresenting,
+                allowedContentTypes: [UTType(filenameExtension: "ipa") ?? .archive, .zip],
+                allowsMultipleSelection: true
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    for url in urls {
+                        // ڕێگەپێدان بۆ خوێندنەوەی فایلەکە لە دەرەوەی ئەپەکە
+                        let gotAccess = url.startAccessingSecurityScopedResource()
+                        if gotAccess {
+                            
+                            // لێرەدا دەبێت ئەو کۆدە هەبێت کە فایلەکە دەخاتە ناو ستۆریجی ئەپەکەوە.
+                            // ئەگەر Feather بەکاردەهێنیت، زۆرجار بەم شێوەیەیە:
+                            // downloadManager.import(url) یان Storage.shared.import(url)
+                            
+                            // دوای تەواوبوون، ڕێگەپێدانەکە دادەخرێت
+                            url.stopAccessingSecurityScopedResource()
+                        }
+                    }
+                case .failure(let error):
+                    print("Error importing file: \(error.localizedDescription)")
+                }
             }
         }
     }
