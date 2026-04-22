@@ -6,7 +6,7 @@
 import SwiftUI
 import NimbleViews
 import Foundation
-import UIKit // 👈 ئەمە زیادکرا بۆ ناسینەوەی فەرمانەکانی سیستەم
+import UIKit
 
 // ١. مۆدێلی ئەپەکان
 struct AshteApp: Codable, Identifiable {
@@ -91,6 +91,8 @@ class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate
 struct AshteDownloadButtonView: View {
     let app: AshteApp
     @ObservedObject var downloadManager: DownloadManager
+    var onComplete: () -> Void // 👈 ئەمە زیاد کرا بۆ ئاگادارکردنەوەی تەواوبوون
+    
     @StateObject private var downloader = AshteAppDownloader()
     
     var body: some View {
@@ -145,6 +147,7 @@ struct AshteDownloadButtonView: View {
                         
                         downloader.start(url: downloadURL) { localURL in
                             _ = downloadManager.startDownload(from: localURL)
+                            onComplete() // 👈 کاتێک تەواو بوو نۆتیفیکەیشنی سەرەوە کار پێدەکات
                         }
                     }
                 }) {
@@ -171,70 +174,143 @@ struct SourcesView: View {
     @State private var isLoading = false
     @State private var searchText = ""
     
+    // گۆڕاوەکان بۆ نۆتیفیکەیشنی دابەزاندن
+    @State private var showNotification = false
+    @State private var downloadedApp: AshteApp? = nil
+    
     private var filteredApps: [AshteApp] {
         if searchText.isEmpty { return apps }
         return apps.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
     
     var body: some View {
-        NBNavigationView("Store") {
-            NBListAdaptable {
-                if isLoading {
-                    ProgressView("Loading Apps...")
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding()
-                } else if filteredApps.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "app.dashed")
-                            .font(.system(size: 48))
-                            .foregroundColor(.secondary)
-                        Text("No Apps Found")
-                            .font(.title3.bold())
-                            .foregroundColor(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 250, alignment: .center)
-                } else {
-                    NBSection("Apps") {
-                        ForEach(filteredApps) { app in
-                            HStack(spacing: 16) {
-                                AsyncImage(url: app.fullImageURL) { image in
-                                    image.resizable()
-                                         .aspectRatio(contentMode: .fill)
-                                } placeholder: {
-                                    Color.gray.opacity(0.2)
+        ZStack(alignment: .top) { // 👈 ZStack بەکارهات بۆ ئەوەی نۆتیفیکەیشنەکە بێتە سەرەوەی هەموو شتێک
+            NBNavigationView("Store") {
+                NBListAdaptable {
+                    if isLoading {
+                        ProgressView("Loading Apps...")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                    } else if filteredApps.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "app.dashed")
+                                .font(.system(size: 48))
+                                .foregroundColor(.secondary)
+                            Text("No Apps Found")
+                                .font(.title3.bold())
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 250, alignment: .center)
+                    } else {
+                        NBSection("Apps") {
+                            ForEach(filteredApps) { app in
+                                HStack(spacing: 16) {
+                                    AsyncImage(url: app.fullImageURL) { image in
+                                        image.resizable()
+                                             .aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Color.gray.opacity(0.2)
+                                    }
+                                    .frame(width: 55, height: 55)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(app.name)
+                                            .font(.headline)
+                                        Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    
+                                    AshteDownloadButtonView(app: app, downloadManager: downloadManager) {
+                                        // 👈 پیشاندانی نۆتیفیکەیشنەکە بە ئەنیمەیشنەوە کاتێک دابەزاندن تەواو دەبێت
+                                        self.downloadedApp = app
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                            self.showNotification = true
+                                        }
+                                        // لابردنی نۆتیفیکەیشنەکە دوای ٤ چرکە
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                            withAnimation(.easeOut) {
+                                                self.showNotification = false
+                                            }
+                                        }
+                                    }
                                 }
-                                .frame(width: 55, height: 55)
-                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(app.name)
-                                        .font(.headline)
-                                    Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                                
-                                AshteDownloadButtonView(app: app, downloadManager: downloadManager)
+                                .padding(.vertical, 4)
                             }
-                            .padding(.vertical, 4)
                         }
                     }
                 }
+                .searchable(text: $searchText, placement: .platform())
+                .refreshable {
+                    await loadApps()
+                }
             }
-            .searchable(text: $searchText, placement: .platform())
-            .refreshable {
-                await loadApps() // 👈 ئێستا بێ کێشە کار دەکات
+            .onAppear {
+                Task {
+                    await loadApps()
+                }
             }
-        }
-        .onAppear {
-            Task {
-                await loadApps()
+            
+            // ٥. بەشی نۆتیفیکەیشنەکە (دیزاینکراوە بە شێوەی ئەپڵ)
+            if showNotification, let app = downloadedApp {
+                notificationBanner(for: app)
+                    .padding(.top, 8)
+                    .zIndex(100) // بۆ ئەوەی هەمیشە لەسەرەوە بێت
             }
         }
     }
     
-    // ٥. فەرمانی هێنان و نوێکردنەوە (بەشێوازی ئەسینک)
+    // دیزاینی نۆتیفیکەیشنەکە کە لە سەرەوە دێتە خوارەوە
+    @ViewBuilder
+    private func notificationBanner(for app: AshteApp) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            // وێنەی لۆگۆکەی خۆت لە لای چەپ
+            AsyncImage(url: URL(string: "https://ashtemobile.tututweak.com/a.png")) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.black
+            }
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            // دەقەکان
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Download Complete")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("now")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Text("\(app.name) has been downloaded successfully to the Library.")
+                    .font(.footnote)
+                    .lineLimit(2)
+            }
+
+            // وێنەی ئەپەکە لە لای ڕاست
+            AsyncImage(url: app.fullImageURL) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.gray.opacity(0.3)
+            }
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Color(UIColor.systemBackground).opacity(0.95))
+                .shadow(color: Color.black.opacity(0.15), radius: 15, x: 0, y: 5)
+        )
+        .padding(.horizontal, 16)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+    
+    // فەرمانی هێنان و نوێکردنەوە
     private func loadApps() async {
         DispatchQueue.main.async { isLoading = true }
         
