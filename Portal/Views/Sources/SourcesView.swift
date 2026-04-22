@@ -6,45 +6,56 @@
 import SwiftUI
 import NimbleViews
 
-// ١. مۆدێلێک بۆ خوێندنەوەی فایلی json ـەکەی خۆت
+// ١. مۆدێلی نوێ کە لەگەڵ فایلی ipa.json دەگونجێت
 struct AshteApp: Codable, Identifiable {
-    var id: String { bundle }
+    var id: String { url } // لینکەکە وەک ID بەکاردێت چونکە جیاوازە بۆ هەر ئەپێک
     let name: String
-    let version: String
-    let category: String
-    let image: String
-    let size: String
-    let developer: String
-    let bundle: String
-    let url: String // لینکی دابەزاندن بە Base64
+    let version: String?
+    let category: String?
+    let image: String?
+    let size: String?
+    let developer: String?
+    let bundle: String?
+    let url: String // لینکی دابەزاندنی IPA بە Base64
 
     // بەکارهێنانی دۆمەینی خۆت بۆ وێنەکان
     var fullImageURL: URL? {
-        URL(string: "https://ashtemobile.tututweak.com/\(image)")
+        guard let img = image else { return nil }
+        return URL(string: "https://ashtemobile.tututweak.com/\(img)")
     }
 }
 
-// ٢. ڕووکاری سەرەکی بۆ نیشاندانی ئەپەکانت
+// ٢. ڕووکاری سەرەکی
 struct SourcesView: View {
+    // 👈 هێنانی DownloadManager بۆ ئەوەی ڕاستەوخۆ بخرێتە ناو Library
+    @StateObject var downloadManager = DownloadManager.shared 
+    
     @State private var apps: [AshteApp] = []
     @State private var isLoading = false
     @State private var searchText = ""
     
-    // گەڕان بەناو ئەپەکاندا
     private var filteredApps: [AshteApp] {
         if searchText.isEmpty { return apps }
         return apps.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
     
     var body: some View {
-        NBNavigationView("Store") { // ناوی بەشەکە گۆڕدرا بۆ Store
+        NBNavigationView("Store") {
             NBListAdaptable {
                 if isLoading {
                     ProgressView("Loading Apps...")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 } else if filteredApps.isEmpty {
-                    ContentUnavailableView("No Apps Found", systemImage: "app.dashed")
+                    VStack(spacing: 16) {
+                        Image(systemName: "app.dashed")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary)
+                        Text("No Apps Found")
+                            .font(.title3.bold())
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 250, alignment: .center)
                 } else {
                     NBSection("Apps") {
                         ForEach(filteredApps) { app in
@@ -63,18 +74,20 @@ struct SourcesView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(app.name)
                                         .font(.headline)
-                                    Text("\(app.category) • \(app.size)")
+                                    
+                                    // بەکارهێنانی زانیارییەکان گەر هەبن، گەر نا بەتاڵ
+                                    Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                 }
                                 
                                 Spacer()
                                 
-                                // دوگمەی دابەزاندن (Install)
+                                // دوگمەی دابەزاندن بۆ ناو Library
                                 Button(action: {
                                     installApp(base64String: app.url)
                                 }) {
-                                    Text("Install")
+                                    Text("Get")
                                         .font(.subheadline)
                                         .bold()
                                         .padding(.horizontal, 16)
@@ -100,11 +113,12 @@ struct SourcesView: View {
         }
     }
     
-    // ٣. فرمانی هێنانی فایلی json لە سێرڤەری ashtemobile
+    // ٣. هێنانی فایلی ipa.json لە سێرڤەرەکەتەوە
     private func loadApps() {
         isLoading = true
         
-        guard let url = URL(string: "https://ashtemobile.tututweak.com/apps.json") else {
+        // 👈 لینکەکە گۆڕدرا بۆ ipa.json
+        guard let url = URL(string: "https://ashtemobile.tututweak.com/ipa.json") else {
             isLoading = false
             return
         }
@@ -117,20 +131,26 @@ struct SourcesView: View {
                         let decodedApps = try JSONDecoder().decode([AshteApp].self, from: data)
                         self.apps = decodedApps
                     } catch {
-                        print("Error decoding apps.json: \(error)")
+                        print("Error decoding ipa.json: \(error)")
                     }
                 }
             }
         }.resume()
     }
     
-    // ٤. فرمانی دابەزاندن و کردنەوەی لینکی itms-services دوای وەرگێڕانی Base64
+    // ٤. ناردنی لینکەکان بۆ ناو بەشی Library بە مەبەستی دابەزاندن
     private func installApp(base64String: String) {
         if let decodedData = Data(base64Encoded: base64String),
            let decodedString = String(data: decodedData, encoding: .utf8),
-           let installURL = URL(string: decodedString) {
+           let downloadURL = URL(string: decodedString) {
             
-            UIApplication.shared.open(installURL)
+            // 👈 ئەم فەرمانە ڕاستەوخۆ دەست دەکات بە دابەزاندنی فایلەکە بۆ ناو بەشی Library
+            _ = downloadManager.startDownload(from: downloadURL)
+            
+            // پیشاندانی ئاگادارکردنەوەیەکی کورت کە دابەزاندن دەستی پێکرد
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            
         } else {
             print("Failed to decode base64 URL")
         }
