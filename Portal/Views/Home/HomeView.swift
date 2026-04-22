@@ -207,9 +207,9 @@ struct SocialMediaFooter: View {
                 .foregroundColor(.secondary)
             
             HStack(spacing: 25) {
-                SocialButton(icon: "paperplane.fill", color: .blue, url: "https://t.me/ashtemmobile") // Telegram
-                SocialButton(icon: "camera.fill", color: Color(UIColor.systemPurple), url: "https://www.instagram.com/ashte.mobile") // Instagram
-                SocialButton(icon: "play.tv.fill", color: .black, url: "https://www.tiktok.com/@ashtemmobile") // TikTok
+                SocialButton(icon: "paperplane.fill", color: .blue, url: "https://t.me/ashtemobile") // Telegram
+                SocialButton(icon: "camera.fill", color: Color(UIColor.systemPurple), url: "https://www.instagram.com/ashtemobile") // Instagram
+                SocialButton(icon: "play.tv.fill", color: .black, url: "https://www.tiktok.com/@ashtemobile") // TikTok
                 SocialButton(icon: "camera.viewfinder", color: .yellow, url: "https://www.snapchat.com/add/ashtemzere") // Snapchat
             }
         }
