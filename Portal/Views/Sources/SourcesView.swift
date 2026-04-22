@@ -8,7 +8,6 @@ import NimbleViews
 import Foundation
 import UIKit
 
-// ١. مۆدێلی ئەپەکان
 struct AshteApp: Codable, Identifiable {
     var id: String { url }
     let name: String
@@ -26,7 +25,6 @@ struct AshteApp: Codable, Identifiable {
     }
 }
 
-// ٢. بەڕێوەبەری دابەزاندن
 class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var progress: CGFloat = 0
     @Published var isDownloading = false
@@ -87,11 +85,10 @@ class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate
     }
 }
 
-// ٣. دیزاینی دوگمەی Get
 struct AshteDownloadButtonView: View {
     let app: AshteApp
     @ObservedObject var downloadManager: DownloadManager
-    var onComplete: () -> Void // 👈 ئەمە زیاد کرا بۆ ئاگادارکردنەوەی تەواوبوون
+    var onComplete: () -> Void
     
     @StateObject private var downloader = AshteAppDownloader()
     
@@ -147,7 +144,7 @@ struct AshteDownloadButtonView: View {
                         
                         downloader.start(url: downloadURL) { localURL in
                             _ = downloadManager.startDownload(from: localURL)
-                            onComplete() // 👈 کاتێک تەواو بوو نۆتیفیکەیشنی سەرەوە کار پێدەکات
+                            onComplete() 
                         }
                     }
                 }) {
@@ -167,14 +164,12 @@ struct AshteDownloadButtonView: View {
     }
 }
 
-// ٤. ڕووکاری سەرەکی 
 struct SourcesView: View {
     @StateObject var downloadManager = DownloadManager.shared 
     @State private var apps: [AshteApp] = []
     @State private var isLoading = false
     @State private var searchText = ""
     
-    // گۆڕاوەکان بۆ نۆتیفیکەیشنی دابەزاندن
     @State private var showNotification = false
     @State private var downloadedApp: AshteApp? = nil
     
@@ -184,7 +179,7 @@ struct SourcesView: View {
     }
     
     var body: some View {
-        ZStack(alignment: .top) { // 👈 ZStack بەکارهات بۆ ئەوەی نۆتیفیکەیشنەکە بێتە سەرەوەی هەموو شتێک
+        ZStack(alignment: .top) {
             NBNavigationView("Store") {
                 NBListAdaptable {
                     if isLoading {
@@ -224,12 +219,10 @@ struct SourcesView: View {
                                     Spacer()
                                     
                                     AshteDownloadButtonView(app: app, downloadManager: downloadManager) {
-                                        // 👈 پیشاندانی نۆتیفیکەیشنەکە بە ئەنیمەیشنەوە کاتێک دابەزاندن تەواو دەبێت
                                         self.downloadedApp = app
                                         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                                             self.showNotification = true
                                         }
-                                        // لابردنی نۆتیفیکەیشنەکە دوای ٤ چرکە
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
                                             withAnimation(.easeOut) {
                                                 self.showNotification = false
@@ -253,20 +246,17 @@ struct SourcesView: View {
                 }
             }
             
-            // ٥. بەشی نۆتیفیکەیشنەکە (دیزاینکراوە بە شێوەی ئەپڵ)
             if showNotification, let app = downloadedApp {
                 notificationBanner(for: app)
                     .padding(.top, 8)
-                    .zIndex(100) // بۆ ئەوەی هەمیشە لەسەرەوە بێت
+                    .zIndex(100)
             }
         }
     }
     
-    // دیزاینی نۆتیفیکەیشنەکە کە لە سەرەوە دێتە خوارەوە
     @ViewBuilder
     private func notificationBanner(for app: AshteApp) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // وێنەی لۆگۆکەی خۆت لە لای چەپ
             AsyncImage(url: URL(string: "https://ashtemobile.tututweak.com/a.png")) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
@@ -275,7 +265,6 @@ struct SourcesView: View {
             .frame(width: 42, height: 42)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            // دەقەکان
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Download Complete")
@@ -291,7 +280,6 @@ struct SourcesView: View {
                     .lineLimit(2)
             }
 
-            // وێنەی ئەپەکە لە لای ڕاست
             AsyncImage(url: app.fullImageURL) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
@@ -310,11 +298,11 @@ struct SourcesView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
     
-    // فەرمانی هێنان و نوێکردنەوە
     private func loadApps() async {
         DispatchQueue.main.async { isLoading = true }
         
-        guard let url = URL(string: "https://ashtemobile.tututweak.com/ipa.json") else {
+        // 👈 لێرەدا فایلەکە گۆڕدرا بۆ ashte.json
+        guard let url = URL(string: "https://ashtemobile.tututweak.com/ashte.json") else {
             DispatchQueue.main.async { isLoading = false }
             return
         }
@@ -327,7 +315,7 @@ struct SourcesView: View {
                 self.isLoading = false
             }
         } catch {
-            print("Error decoding ipa.json: \(error)")
+            print("Error decoding json: \(error)")
             DispatchQueue.main.async { self.isLoading = false }
         }
     }
