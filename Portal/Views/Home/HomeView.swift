@@ -1,613 +1,381 @@
+//
+//  HomeView.swift
+//  Feather
+//
+
 import SwiftUI
+import NimbleViews
+import Foundation
 import UIKit
 
-// مۆدێلی داتاکان بەپێی فایلە JSON ـەکەی خۆت
-struct AppItem: Identifiable, Codable {
-    var id: String { name } // بەکارهێنانی ناوەکە وەک ID
+// ١. مۆدێلی داتاکان
+struct HomeApp: Codable, Identifiable {
+    var id: String { url }
     let name: String
-    let version: String
-    let category: String
-    let image: String
-    let size: String
-    let button: String?
-    let features: [String]?
-    let status: String?
+    let version: String?
+    let category: String?
+    let image: String?
+    let size: String?
     let developer: String?
-    let url: String? // پێویستە بۆ داگرتنی بەرنامەکە
-    let banner: String?
-    let updated: String?
     let bundle: String?
-    let ios: String?
-    let language: String?
+    let url: String
+    let status: String?
+    let banner: String?
+
+    var fullImageURL: URL? {
+        guard let img = image else { return nil }
+        return URL(string: "https://ashtemobile.tututweak.com/\(img)")
+    }
+    
+    var fullBannerURL: URL? {
+        if let ban = banner {
+            return URL(string: "https://ashtemobile.tututweak.com/\(ban)")
+        }
+        return fullImageURL
+    }
 }
 
+// ٢. ڕووکاری سەرەکی Home
 struct HomeView: View {
-    @State private var apps: [AppItem] = []
+    @StateObject var downloadManager = DownloadManager.shared
+    @State private var apps: [HomeApp] = []
+    
+    // هێنانی تەنها ٣ ئەپ کە status ـیان دیاریکراوە
+    var featuredApps: [HomeApp] {
+        Array(apps.filter { $0.status == "new" || $0.status == "top" || $0.status == "update" }.prefix(3))
+    }
     
     var body: some View {
-        NavigationView {
+        NBNavigationView("Home") {
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(apps) { app in
-                        AppRowView(app: app)
-                        
-                        // هێڵێکی جیاکەرەوە لە نێوان ئەپەکان
-                        Divider()
-                            .padding(.leading, 88)
+                VStack(spacing: 24) {
+                    
+                    // بەشی سەرەوە: سلایدی ئەپە تایبەتەکان
+                    if !featuredApps.isEmpty {
+                        TabView {
+                            ForEach(featuredApps) { app in
+                                FeaturedAppView(app: app, downloadManager: downloadManager)
+                            }
+                        }
+                        .frame(height: 240)
+                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .always))
                     }
+                    
+                    // بەشی ناوەڕاست: لیستی هەموو ئەپەکان
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Recommended For You")
+                            .font(.title3.bold())
+                            .padding(.horizontal, 20)
+                        
+                        LazyVStack(spacing: 0) {
+                            ForEach(apps) { app in
+                                HomeAppRowView(app: app, downloadManager: downloadManager)
+                                Divider().padding(.leading, 84)
+                            }
+                        }
+                    }
+                    
+                    // بەشی کۆتایی: سۆشیاڵ میدیا
+                    SocialMediaFooter()
+                        .padding(.vertical, 20)
+                        .padding(.bottom, 30)
                 }
-                .padding(.top, 8)
+                .padding(.top, 10)
             }
-            .navigationTitle("Apps & Games")
-            .onAppear {
-                loadAppsData()
+            .refreshable {
+                await loadApps()
+            }
+        }
+        .onAppear {
+            Task {
+                await loadApps()
             }
         }
     }
     
-    // فەنکشنێک بۆ هێنانە ناوەوەی داتاکانی JSON
-    private func loadAppsData() {
-        guard let data = appsJSONString.data(using: .utf8) else { return }
+    private func loadApps() async {
+        guard let url = URL(string: "https://ashtemobile.tututweak.com/ashte.json") else { return }
         do {
-            let decodedApps = try JSONDecoder().decode([AppItem].self, from: data)
-            self.apps = decodedApps
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let decoded = try JSONDecoder().decode([HomeApp].self, from: data)
+            DispatchQueue.main.async {
+                self.apps = decoded
+            }
         } catch {
-            print("Error decoding JSON: \(error)")
+            print("Error loading: \(error)")
         }
     }
 }
 
-// دیزاینی ڕیزی هەر ئەپێک بە ستایلی ستۆر
-struct AppRowView: View {
-    let app: AppItem
+// ٣. دیزاینی بەشی سەرەوە (Featured)
+struct FeaturedAppView: View {
+    let app: HomeApp
+    @ObservedObject var downloadManager: DownloadManager
     
-    // گۆڕاوێک بۆ نیشاندانی نامەی دڵنیابوونەوە لە کاتی داگرتن
-    @State private var showInstallAlert = false
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            // وێنە گەورەکەی ئەپەکە
+            AsyncImage(url: app.fullBannerURL) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.blue.opacity(0.2)
+            }
+            .frame(height: 210)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            
+            // سێبەری خوارەوە بۆ ئەوەی نووسینەکان بە ڕوونی دەربکەون
+            LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .frame(height: 210)
+            
+            // زانیارییەکانی ئەپەکە لەسەر وێنەکە
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let status = app.status {
+                        Text(status.uppercased())
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.blue)
+                            .clipShape(Capsule())
+                    }
+                    
+                    Text(app.name)
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Text(app.category ?? "App")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                Spacer()
+                
+                // دوگمەی داونلۆدکردن
+                HomeDownloadButtonView(app: app, downloadManager: downloadManager)
+                    .colorScheme(.dark)
+            }
+            .padding(16)
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 25)
+    }
+}
+
+// ٤. دیزاینی ڕیزی ئەپەکان لە خوارەوە
+struct HomeAppRowView: View {
+    let app: HomeApp
+    @ObservedObject var downloadManager: DownloadManager
     
     var body: some View {
         HStack(spacing: 16) {
-            // شوێنی وێنەی ئەپەکە
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color.blue.opacity(0.1))
-                
-                Image(systemName: app.category == "Games" ? "gamecontroller.fill" : "app.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.blue)
+            AsyncImage(url: app.fullImageURL) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.gray.opacity(0.2)
             }
-            .frame(width: 72, height: 72)
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             
-            // زانیارییەکانی ئەپەکە (ناو، گەشەپێدەر، قەبارە)
             VStack(alignment: .leading, spacing: 4) {
                 Text(app.name)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.headline)
                     .lineLimit(1)
                 
-                Text(app.developer ?? app.category)
-                    .font(.system(size: 13, weight: .regular))
+                Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
-                
-                Text(app.size)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.secondary)
             }
             
-            Spacer(minLength: 10)
+            Spacer()
             
-            // دوگمەی Get
-            Button(action: {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                // نیشاندانی نامەی دڵنیابوونەوە
-                showInstallAlert = true
-            }) {
-                Text(app.button ?? "Get")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.blue)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 8)
-                    .background(Color(uiColor: .systemGray6))
-                    .clipShape(Capsule())
-            }
-            // نامەی Alert
-            .alert("Install App", isPresented: $showInstallAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Install") {
-                    installApp()
-                }
-            } message: {
-                Text("Would you like to install \(app.name)?")
-            }
+            HomeDownloadButtonView(app: app, downloadManager: downloadManager)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .contentShape(Rectangle())
     }
-    
-    // فەنکشنی ئینستاڵکردن بە itms-services
-    private func installApp() {
-        guard let base64Url = app.url,
-              let decodedData = Data(base64Encoded: base64Url),
-              let decodedUrlString = String(data: decodedData, encoding: .utf8) else {
-            print("Error: Could not decode URL for \(app.name)")
-            return
-        }
-        
-        let manifestString = "itms-services://?action=download-manifest&url=\(decodedUrlString)"
-        
-        if let url = URL(string: manifestString) {
-            UIApplication.shared.open(url, options: [:]) { success in
-                if success {
-                    print("Successfully opened itms-services for \(app.name)")
-                } else {
-                    print("Failed to open itms-services link.")
-                }
+}
+
+// ٥. بەشی سۆشیاڵ میدیا
+struct SocialMediaFooter: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Follow Us")
+                .font(.headline)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 25) {
+                SocialButton(icon: "paperplane.fill", color: .blue, url: "https://t.me/ashtemmobile") // Telegram
+                SocialButton(icon: "camera.fill", color: Color(UIColor.systemPurple), url: "https://www.instagram.com/ashte.mobile") // Instagram
+                SocialButton(icon: "play.tv.fill", color: .black, url: "https://www.tiktok.com/@ashtemmobile") // TikTok
+                SocialButton(icon: "camera.viewfinder", color: .yellow, url: "https://www.snapchat.com/add/ashtemzere") // Snapchat
             }
+        }
+        .padding(.vertical, 20)
+        .padding(.horizontal)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color(UIColor.secondarySystemBackground)))
+        .padding(.horizontal, 20)
+    }
+}
+
+struct SocialButton: View {
+    let icon: String
+    let color: Color
+    let url: String
+    
+    var body: some View {
+        Button(action: {
+            if let link = URL(string: url) {
+                UIApplication.shared.open(link)
+            }
+        }) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(.white)
+                .frame(width: 54, height: 54)
+                .background(color)
+                .clipShape(Circle())
+                .shadow(color: color.opacity(0.3), radius: 8, x: 0, y: 4)
         }
     }
 }
 
-// MARK: - داتای تەواوەتی JSON ـەکەی خۆت بە لینکەکانەوە
-let appsJSONString = """
-[
-  { 
-    "name": "VideoStar 26", 
-    "version": "14.4.6", 
-    "category": "Apps", 
-    "image": "img/VideoStar26.png",
-    "banner": "imgg/videostar1.png",
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvVmlkZW9TdGFyMS5pcGE=",
-    "size": "592.47 MB",
-    "status": "top",
-    "button": "Get",
-    "features": [
-      "Pro Version Unlocked",
-      "All Effects Free",
-      "No Watermark"
-    ]
-  },
-  { 
-    "name": "Russian Village Traffic Racer", 
-    "version": "0.4.3", 
-    "category": "Games", 
-    "image": "img/RussianVillage.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvUnVzc2lhblZpbGxhZ2UuaXBh",
-    "size": "630.29 MB",
-    "button": "Get",
-    "features": [
-      "Auto Complete Tasks",
-      "Freeze Currency",
-      "Unlock All Cars",
-      "Unlock VIP",
-      "No Ads"
-    ]
-  },
-  { 
-    "name": "Matchington", 
-    "version": "V 1.198.0", 
-    "category": "Games", 
-    "image": "img/Matchington.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvTWF0Y2hpbmd0b24uaXBh",
-    "size": "194.67 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.matchington",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Infinite Moves",
-      "Infinite Booster",
-      "Infinite Lives"
-    ]
-  },
-  { 
-    "name": "Tropic Escape", 
-    "version": "V 1.121", 
-    "category": "Games", 
-    "image": "img/TropicEscape.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvVHJvcGljRXNjYXBlLmlwYQ==",
-    "size": "200.07 MB", 
-    "status": "new",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.tropicescape",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Freeze Currencies"
-    ]
-  },
-  { 
-    "name": "Prison Empire", 
-    "version": "V 4.2.5", 
-    "category": "Games", 
-    "image": "img/PrisonEmpire.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvUHJpc29uRW1waXJlLmlwYQ==",
-    "size": "378.47 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.prisonempire",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Freeze Cash",
-      "No Ads"
-    ]
-  },
-  { 
-    "name": "Jawaker", 
-    "version": "V 28.2.76", 
-    "category": "Games", 
-    "image": "img/Jawaker.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvSmF3YWtlci5pcGE=",
-    "size": "192.76 MB",
-    "status": "new",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.jawaker",
-    "ios": "13.0",
-    "language": "EN, AR",
-    "button": "Get",
-    "features": [
-      "Pasha activation.",
-      "More rewards.",
-      "Open instant messages."
-    ]
-  },
-  { 
-    "name": "Polygun Arena", 
-    "version": "V 1.0605", 
-    "category": "Games", 
-    "image": "img/PolygunArena.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvUG9seWd1bkFyZW5hLmlwYQ==",
-    "size": "625.33 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.polygunarena",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Unlimited Ammo -> Will not decrease.",
-      "No Camera Shake",
-      "Damage Multiplayer",
-      "Defence Multiplayer",
-      "Speed Multiplayer"
-    ]
-  },
-  { 
-    "name": "Homescapes", 
-    "version": "V 8.6.600", 
-    "category": "Games", 
-    "image": "img/Homescapes.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvSG9tZXNjYXBlcy5pcGE=",
-    "size": "198.9 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.homescapes",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Infinite Moves",
-      "Infinite Boosters",
-      "Infinite Lives",
-      "Infinite Coins",
-      "Complete Tasks without Stars",
-      "Unlock Season Pass"
-    ]
-  },
-  { 
-    "name": "Township", 
-    "version": "V 34.0.1", 
-    "category": "Games", 
-    "image": "img/Township.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvVG93bnNoaXAuaXBh",
-    "size": "192.42 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.township",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Freeze Currencies"
-    ]
-  },
-  { 
-    "name": "EA SPORTS FC™ Mobile", 
-    "version": "V 26.1.04", 
-    "category": "Games", 
-    "image": "img/EASPORTSFC.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvRUFTUE9SVFNGQy5pcGE=",
-    "size": "139.1 MB",
-    "developer": "EA SPORTS",
-    "updated": "2026-03-14",
-    "bundle": "com.ea.ios.fifamobile",
-    "ios": "13.0",
-    "language": "EN, AR",
-    "button": "Get",
-    "features": [
-      "Stupid Al Detense",
-      "Sometimes works, sometimes doesn't."
-    ]
-  },
-  { 
-    "name": "Candy Crush Saga", 
-    "version": "V 1.322.0", 
-    "category": "Games", 
-    "image": "img/CandyCrushSaga.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvQ2FuZHlDcnVzaFNhZ2EuaXBh",
-    "size": "113.1 MB",
-    "developer": "King",
-    "updated": "2026-03-14",
-    "bundle": "com.midasplayer.apps.candycrushsaga",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Infinite Lives",
-      "Infinite Boosters"
-    ]
-  },
-  { 
-    "name": "Gardenscapes", 
-    "version": "9.4.5", 
-    "category": "Games", 
-    "image": "img/Gardenscapes.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvR2FyZGVuc2NhcGVzLmlwYQ==",
-    "size": "210.56 MB",
-    "status": "update",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.gardenscapes",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Infinite Moves",
-      "Infinite Boosters",
-      "Infinite Lives"
-    ]
-  },
-  { 
-    "name": "Royal Match", 
-    "version": "V 34386", 
-    "category": "Games", 
-    "image": "img/RoyalMatch.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvUm95YWxNYXRjaC5pcGE=",
-    "size": "209.8 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.royalmatch",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Freeze Coins",
-      "Freeze Lives",
-      "Freeze Stars",
-      "Freeze Boosters",
-      "Freeze Time",
-      "Freeze Moves",
-      "Unlock VIP Badges",
-      "Auto Win -> Finish Stage"
-    ]
-  },
-  { 
-    "name": "Fruit Ninja", 
-    "version": "V 3.93.2", 
-    "category": "Games", 
-    "image": "img/FruitNinja.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvRnJ1aXROaW5qYS5pcGE=",
-    "size": "270.8 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.fruitninja",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "No Bomb",
-      "Freeze Starfruit",
-      "Infinite Boosters"
-    ]
-  },
-  { 
-    "name": "8 Ball Pool", 
-    "version": "V 56.18.2", 
-    "category": "Games", 
-    "image": "img/Ball.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvOEJhbGxQb29sLmlwYQ==",
-    "size": "99.5 MB",
-    "developer": "Miniclip",
-    "updated": "2026-03-14",
-    "bundle": "com.miniclip.8ballpoolmult",
-    "ios": "13.0",
-    "language": "EN, AR",
-    "button": "Get",
-    "features": [
-      "Auto Aim (Cheat)",
-      "One Shot",
-      "Show Lines",
-      "Long Cue No Jailbreak Required"
-    ]
-  },
-  { 
-    "name": "Subway Surf", 
-    "version": "V 3.59.1", 
-    "category": "Games", 
-    "image": "img/SubwaySurf.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvU3Vid2F5U3VyZi5pcGE=",
-    "size": "196.5 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.subwaysurf",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Unlimited Keys",
-      "Unlimited Coins",
-      "Never Dies",
-      "High Jump",
-      "Infinite XP"
-    ]
-  },
-  { 
-    "name": "LEGO Hill Climb", 
-    "version": "V 2.3.1", 
-    "category": "Games", 
-    "image": "img/LEGOHill.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvTEVHT0hpbGwuaXBh",
-    "size": "726.2 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.legohillclimb",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Unlimited Currencies"
-    ]
-  },
-  { 
-    "name": "Zombie Highway 2", 
-    "version": "V 1.6.1", 
-    "category": "Games", 
-    "image": "img/Zombie.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2FzaHRlbXplcmUvTXlTaWduZXIvcmVsZWFzZXMvZG93bmxvYWQvdjEuMC9aSDIuaXBh",
-    "size": "94 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.zombiehighway2",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Free Store (not iAP)",
-      "One Hit Kill",
-      "Infinite Ammo"
-    ]
-  },
-  { 
-    "name": "Video Star", 
-    "version": "V 12.2.2", 
-    "category": "Apps", 
-    "image": "img/videostar.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvVmlkZW9TdGFyLmlwYQ==",
-    "size": "169.5 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.videostar",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Pro Version Unlocked",
-      "All Effects Free",
-      "No Watermark"
-    ]
-  },
-  { 
-    "name": "InShot", 
-    "version": "V 1.86.0", 
-    "category": "Apps", 
-    "image": "img/inshot.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvSW5TaG90LmlwYQ==",
-    "size": "134.5 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.inshot",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Pro Unlocked",
-      "No Ads",
-      "All Transitions Unlocked"
-    ]
-  },
-  { 
-    "name": "PicsArt", 
-    "version": "V 28.9.4", 
-    "category": "Apps", 
-    "image": "img/PicsArt.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvUGljc0FydC5pcGE=",
-    "size": "110.7 MB",
-    "developer": "AshteMobile",
-    "updated": "2026-03-14",
-    "bundle": "com.ashtemobile.picsart",
-    "ios": "13.0",
-    "language": "EN",
-    "button": "Get",
-    "features": [
-      "Gold Features Unlocked",
-      "Premium Filters Free",
-      "No Ads"
-    ]
-  },
-  { 
-    "name": "TikTok", 
-    "version": "V 34.1.0", 
-    "category": "Apps", 
-    "image": "img/tiktok.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvVGlrVG9rLmlwYQ==",
-    "size": "243.0 MB",
-    "developer": "TikTok Ltd.",
-    "updated": "2026-03-14",
-    "bundle": "com.zhiliaoapp.musically",
-    "ios": "13.0",
-    "language": "EN, AR",
-    "button": "Get",
-    "features": [
-      "No Watermark Download",
-      "Region Unlocked",
-      "No Ads"
-    ]
-  },
-  { 
-    "name": "YouTube", 
-    "version": "V 19.49.7", 
-    "category": "Apps", 
-    "image": "img/YouTube.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvWW91VHViZS5pcGE=",
-    "size": "117.9 MB",
-    "developer": "Google LLC",
-    "updated": "2026-03-14",
-    "bundle": "com.google.ios.youtube",
-    "ios": "13.0",
-    "language": "EN, AR, KU",
-    "button": "Get",
-    "features": [
-      "YouTube Premium Unlocked",
-      "Background Play",
-      "Picture in Picture (PiP)",
-      "No Ads"
-    ]
-  },
-  { 
-    "name": "Instagram", 
-    "version": "V 359.0.0", 
-    "category": "Apps", 
-    "image": "img/instagram.png", 
-    "url": "aHR0cHM6Ly9naXRodWIuY29tL2lvczk0L2lwYS9yZWxlYXNlcy9kb3dubG9hZC8xLjAvQkhJbnN0YWdyYW0uaXBh",
-    "size": "147.3 MB",
-    "developer": "Instagram, Inc.",
-    "updated": "2026-03-14",
-    "bundle": "com.burbn.instagram",
-    "ios": "13.0",
-    "language": "EN, AR",
-    "button": "Get",
-    "features": [
-      "Rocket Features",
-      "Download Media & Stories",
-      "Ghost Mode (Hide Read)",
-      "No Ads"
-    ]
-  }
-]
-"""
+// ٦. لۆجیکی داونلۆدکردن و نیشاندانی بازنەکە
+class HomeAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
+    @Published var progress: CGFloat = 0
+    @Published var isDownloading = false
+    @Published var isFinished = false
+    
+    private var downloadTask: URLSessionDownloadTask?
+    private var session: URLSession?
+    private var downloadURL: URL?
+    private var onFinished: ((URL) -> Void)?
+    
+    func start(url: URL, onFinished: @escaping (URL) -> Void) {
+        self.downloadURL = url
+        self.onFinished = onFinished
+        self.isDownloading = true
+        self.progress = 0
+        self.isFinished = false
+        
+        self.session = URLSession(configuration: .default, delegate: self, delegateQueue: OperationQueue.main)
+        downloadTask = session?.downloadTask(with: url)
+        downloadTask?.resume()
+    }
+    
+    func stop() {
+        downloadTask?.cancel()
+        session?.invalidateAndCancel()
+        self.isDownloading = false
+        self.progress = 0
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if totalBytesExpectedToWrite > 0 {
+            self.progress = CGFloat(totalBytesWritten) / CGFloat(totalBytesExpectedToWrite)
+        }
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileName = "\(UUID().uuidString)-\(downloadURL?.lastPathComponent ?? "app.ipa")"
+        let destinationURL = tempDir.appendingPathComponent(fileName)
+        
+        try? FileManager.default.removeItem(at: destinationURL)
+        do {
+            try FileManager.default.copyItem(at: location, to: destinationURL)
+            self.isDownloading = false
+            self.isFinished = true
+            self.onFinished?(destinationURL)
+        } catch {
+            self.isDownloading = false
+        }
+        session.finishTasksAndInvalidate()
+    }
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if error != nil {
+            self.isDownloading = false
+        }
+        session.finishTasksAndInvalidate()
+    }
+}
+
+struct HomeDownloadButtonView: View {
+    let app: HomeApp
+    @ObservedObject var downloadManager: DownloadManager
+    @StateObject private var downloader = HomeAppDownloader()
+    
+    var body: some View {
+        HStack(alignment: .center) {
+            Spacer()
+            
+            if downloader.isFinished {
+                Button(action: {}) {
+                    Image(systemName: "checkmark")
+                        .font(.subheadline.weight(.bold))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                }
+                .disabled(true)
+            } else if downloader.isDownloading {
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 3)
+                        .frame(width: 28, height: 28)
+                    
+                    if downloader.progress > 0 {
+                        Circle()
+                            .trim(from: 0, to: downloader.progress)
+                            .stroke(Color.blue, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 28, height: 28)
+                            .animation(.linear(duration: 0.2), value: downloader.progress)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    }
+                    
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.blue)
+                        .frame(width: 10, height: 10)
+                        .onTapGesture {
+                            downloader.stop()
+                        }
+                }
+                .frame(width: 50, height: 35, alignment: .center)
+            } else {
+                Button(action: {
+                    if let decodedData = Data(base64Encoded: app.url),
+                       let decodedString = String(data: decodedData, encoding: .utf8),
+                       let downloadURL = URL(string: decodedString) {
+                        
+                        let generator = UINotificationFeedbackGenerator()
+                        generator.notificationOccurred(.success)
+                        
+                        downloader.start(url: downloadURL) { localURL in
+                            _ = downloadManager.startDownload(from: localURL)
+                        }
+                    }
+                }) {
+                    Text("Get")
+                        .font(.subheadline)
+                        .bold()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(width: 80, alignment: .trailing)
+    }
+}
