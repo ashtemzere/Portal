@@ -26,7 +26,7 @@ extension AppIconView {
 	}
 	
 	static func altImage(_ name: String?) -> UIImage {
-		let path = Bundle.main.bundleURL.appendingPathComponent((name ?? "AppIcon60x60") + "https://ashtemobile.tututweak.com/a.png")
+		let path = Bundle.main.bundleURL.appendingPathComponent((name ?? "AppIcon60x60") + "ashte.png")
 		return UIImage(contentsOfFile: path.path) ?? UIImage()
 	}
 }
