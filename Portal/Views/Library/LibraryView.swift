@@ -116,25 +116,22 @@ struct LibraryView: View {
                     for url in urls {
                         let gotAccess = url.startAccessingSecurityScopedResource()
                         if gotAccess {
-                            // لێرەدا فایلەکە لە سکیوریتی ئایفۆنەکەوە کۆپی دەکەین بۆ ناو ئەپەکە
                             let tempDirectory = FileManager.default.temporaryDirectory
                             let destinationUrl = tempDirectory.appendingPathComponent(url.lastPathComponent)
                             
                             do {
-                                // ئەگەر فایلەکە پێشتر هەبێت، دەیڕەینەوە
                                 if FileManager.default.fileExists(atPath: destinationUrl.path) {
                                     try FileManager.default.removeItem(at: destinationUrl)
                                 }
-                                // کۆپیکردنی فایلە ڕاستەقینەکە بۆ ناو ئەپەکە
                                 try FileManager.default.copyItem(at: url, to: destinationUrl)
                                 
-                                // ئێستا کە فایلەکە بە سەلامەتی لەناو ئەپەکەدایە، هێنراوەتە ناوەوە (Import دەکرێت)
-                                downloadManager.import(destinationUrl)
+                                // کێشەی ئیرۆری 65 لێرەدا چارەسەر کرا بە بەکارهێنانی فەرمانی دروستی پڕۆژەکە
+                                _ = downloadManager.startDownload(from: destinationUrl)
+                                
                             } catch {
                                 print("Copy Error: \(error.localizedDescription)")
                             }
                             
-                            // داخستنی ڕێگەپێدانەکە دوای کۆپیکردن
                             url.stopAccessingSecurityScopedResource()
                         }
                     }
