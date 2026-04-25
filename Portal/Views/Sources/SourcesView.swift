@@ -18,6 +18,7 @@ struct AshteApp: Codable, Identifiable {
     let developer: String?
     let bundle: String?
     let url: String
+    let hack: [String]?
 
     var fullImageURL: URL? {
         guard let img = image else { return nil }
@@ -56,7 +57,9 @@ class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         if totalBytesExpectedToWrite > 0 {
-            self.progress = CGFloat(totalBytesWritten) / CGFloat(totalBytesExpectedToWrite)
+            DispatchQueue.main.async {
+                self.progress = CGFloat(totalBytesWritten) / CGFloat(totalBytesExpectedToWrite)
+            }
         }
     }
     
@@ -68,18 +71,26 @@ class AshteAppDownloader: NSObject, ObservableObject, URLSessionDownloadDelegate
         try? FileManager.default.removeItem(at: destinationURL)
         do {
             try FileManager.default.copyItem(at: location, to: destinationURL)
-            self.isDownloading = false
-            self.isFinished = true
-            self.onFinished?(destinationURL)
+            DispatchQueue.main.async {
+                self.isDownloading = false
+                self.isFinished = true
+                self.onFinished?(destinationURL)
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        self.isFinished = false
+                    }
+                }
+            }
         } catch {
-            self.isDownloading = false
+            DispatchQueue.main.async { self.isDownloading = false }
         }
         session.finishTasksAndInvalidate()
     }
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if error != nil {
-            self.isDownloading = false
+            DispatchQueue.main.async { self.isDownloading = false }
         }
         session.finishTasksAndInvalidate()
     }
@@ -135,16 +146,15 @@ struct AshteDownloadButtonView: View {
                 .frame(width: 50, height: 35, alignment: .center)
             } else {
                 Button(action: {
-                    if let decodedData = Data(base64Encoded: app.url),
-                       let decodedString = String(data: decodedData, encoding: .utf8),
-                       let downloadURL = URL(string: decodedString) {
-                        
+                    if let downloadURL = URL(string: app.url) {
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                         
                         downloader.start(url: downloadURL) { localURL in
                             _ = downloadManager.startDownload(from: localURL)
-                            onComplete() 
+                            DispatchQueue.main.async {
+                                onComplete() 
+                            }
                         }
                     }
                 }) {
@@ -164,6 +174,200 @@ struct AshteDownloadButtonView: View {
     }
 }
 
+struct AshteAppDetailView: View {
+    let app: AshteApp
+    @ObservedObject var downloadManager: DownloadManager
+    var onDownloadComplete: () -> Void
+    
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                
+                GeometryReader { proxy in
+                    let minY = proxy.frame(in: .global).minY
+                    let isScrolledDown = minY > 0
+                    let height = isScrolledDown ? 220 + minY : 220
+                    let offset = isScrolledDown ? -minY : 0
+
+                    ZStack(alignment: .top) {
+                        AsyncImage(url: app.fullImageURL) { image in
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Color.blue.opacity(0.3)
+                        }
+                        .frame(width: proxy.size.width, height: height)
+                        .clipped()
+                        .blur(radius: 40)
+                        .offset(y: offset)
+                        
+                        HStack {
+                            Button(action: { presentationMode.wrappedValue.dismiss() }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(Circle().fill(Color(UIColor.systemBackground).opacity(0.8)))
+                            }
+                            Spacer()
+                            
+                            // 👈 لێرەشدا شەیرکردنی ڕاستەوخۆی فایلەکەمان گۆڕی
+                            Button(action: {
+                                let shareText = "Download \(app.name) from AshteMobile Store!\nhttps://t.me/ashtemmobile"
+                                let av = UIActivityViewController(activityItems: [shareText], applicationActivities: nil)
+                                UIApplication.shared.windows.first?.rootViewController?.present(av, animated: true, completion: nil)
+                            }) {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundColor(.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(Circle().fill(Color(UIColor.systemBackground).opacity(0.8)))
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, safeAreaTop() + 10)
+                    }
+                }
+                .frame(height: 220)
+                
+                HStack(alignment: .top, spacing: 16) {
+                    AsyncImage(url: app.fullImageURL) { image in
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 110, height: 110)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 6)
+                    
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(app.name)
+                            .font(.title2.bold())
+                            .foregroundColor(.primary)
+                        
+                        if let hacks = app.hack, !hacks.isEmpty {
+                            Text(hacks[0])
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Text(app.category ?? "App")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        AshteDownloadButtonView(app: app, downloadManager: downloadManager, onComplete: onDownloadComplete)
+                            .frame(width: 80, alignment: .leading)
+                            .padding(.top, 4)
+                            .padding(.leading, -20)
+                    }
+                    .padding(.top, 40)
+                }
+                .padding(.horizontal, 20)
+                .offset(y: -55)
+                .padding(.bottom, -35)
+                
+                HStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "tag.fill")
+                            .foregroundColor(Color(UIColor.systemPurple))
+                            .font(.system(size: 13))
+                        Text(app.version ?? "1.0")
+                            .font(.subheadline.bold())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(UIColor.secondarySystemBackground)))
+                    
+                    HStack {
+                        Image(systemName: "shippingbox.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 13))
+                        Text(app.size ?? "Unknown")
+                            .font(.subheadline.bold())
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(UIColor.secondarySystemBackground)))
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Description")
+                        .font(.title3.bold())
+                    
+                    if let hacks = app.hack, !hacks.isEmpty {
+                        ForEach(hacks, id: \.self) { hack in
+                            Text("• \(hack)")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("Download \(app.name) now and enjoy smooth performance and regular updates directly from the AshteMobile Store.")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
+                
+                Divider().padding(.horizontal, 20).padding(.bottom, 16)
+                
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Information")
+                        .font(.title3.bold())
+                        .padding(.bottom, 4)
+                    
+                    AppInfoRow(title: "Source", value: "AshteMobile Repo")
+                    AppInfoRow(title: "Developer", value: app.developer ?? "Unknown")
+                    AppInfoRow(title: "Size", value: app.size ?? "Unknown")
+                    AppInfoRow(title: "Version", value: app.version ?? "1.0")
+                    AppInfoRow(title: "Updated", value: "Recently")
+                    AppInfoRow(title: "Identifier", value: app.bundle ?? "com.ashte.\(app.name.replacingOccurrences(of: " ", with: "").lowercased())")
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 50)
+            }
+        }
+        .navigationBarHidden(true)
+        .ignoresSafeArea(edges: .top)
+    }
+    
+    private func safeAreaTop() -> CGFloat {
+        let window = UIApplication.shared.connectedScenes
+            .filter({$0.activationState == .foregroundActive})
+            .map({$0 as? UIWindowScene})
+            .compactMap({$0})
+            .first?.windows
+            .filter({$0.isKeyWindow}).first
+        return window?.safeAreaInsets.top ?? 44
+    }
+}
+
+struct StoreSocialButton: View {
+    let icon: String
+    let color: Color
+    let url: String
+    
+    var body: some View {
+        Button(action: {
+            if let link = URL(string: url) {
+                UIApplication.shared.open(link)
+            }
+        }) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundColor(.white)
+                .frame(width: 50, height: 50)
+                .background(color)
+                .clipShape(Circle())
+                .shadow(color: color.opacity(0.3), radius: 6, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct SourcesView: View {
     @StateObject var downloadManager = DownloadManager.shared 
     @State private var apps: [AshteApp] = []
@@ -173,15 +377,80 @@ struct SourcesView: View {
     @State private var showNotification = false
     @State private var downloadedApp: AshteApp? = nil
     
+    @State private var selectedFilter = "ALL"
+    let filterOptions = ["ALL", "APP", "GAMES"]
+    
+    @State private var currentBanner = 0
+    let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+    let bannerURLs = [
+        "https://ashtemobile.tututweak.com/1.png",
+        "https://ashtemobile.tututweak.com/2.png",
+        "https://ashtemobile.tututweak.com/3.png",
+        "https://ashtemobile.tututweak.com/4.png"
+    ]
+    
     private var filteredApps: [AshteApp] {
-        if searchText.isEmpty { return apps }
-        return apps.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        var result = apps
+        if selectedFilter == "APP" {
+            result = result.filter { ($0.category ?? "").localizedCaseInsensitiveContains("App") }
+        } else if selectedFilter == "GAMES" {
+            result = result.filter { ($0.category ?? "").localizedCaseInsensitiveContains("Game") }
+        }
+        if !searchText.isEmpty {
+            result = result.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+        }
+        return result
     }
     
     var body: some View {
         ZStack(alignment: .top) {
             NBNavigationView("Store") {
                 NBListAdaptable {
+                    
+                    VStack(spacing: 20) {
+                        TabView(selection: $currentBanner) {
+                            ForEach(0..<bannerURLs.count, id: \.self) { index in
+                                AsyncImage(url: URL(string: bannerURLs[index])) { image in
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Color.gray.opacity(0.2)
+                                }
+                                .frame(height: 180)
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .padding(.horizontal, 16)
+                                .tag(index)
+                            }
+                        }
+                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .always))
+                        .frame(height: 180)
+                        .onReceive(timer) { _ in
+                            withAnimation(.easeInOut(duration: 0.5)) {
+                                currentBanner = (currentBanner + 1) % bannerURLs.count
+                            }
+                        }
+                        
+                        HStack(spacing: 28) {
+                            StoreSocialButton(icon: "paperplane.fill", color: .blue, url: "https://t.me/ashtemobile")
+                            StoreSocialButton(icon: "camera.viewfinder", color: .yellow, url: "https://www.snapchat.com//add/ashtemzere")
+                            StoreSocialButton(icon: "camera.fill", color: Color(UIColor.systemPurple), url: "https://www.instagram.com/ashte.mobile?igsh=c3lqdHNsenozMmp2")
+                            StoreSocialButton(icon: "play.tv.fill", color: .black, url: "https://www.tiktok.com/@ashtemobile")
+                        }
+                        .padding(.bottom, 5)
+                        
+                        Picker("Filter", selection: $selectedFilter) {
+                            ForEach(filterOptions, id: \.self) { option in
+                                Text(option).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                    }
+                    .padding(.top, 16)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
+                    
                     if isLoading {
                         ProgressView("Loading Apps...")
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -199,38 +468,51 @@ struct SourcesView: View {
                     } else {
                         NBSection("Apps") {
                             ForEach(filteredApps) { app in
-                                HStack(spacing: 16) {
-                                    AsyncImage(url: app.fullImageURL) { image in
-                                        image.resizable()
-                                             .aspectRatio(contentMode: .fill)
-                                    } placeholder: {
-                                        Color.gray.opacity(0.2)
+                                NavigationLink(destination: AshteAppDetailView(app: app, downloadManager: downloadManager) {
+                                    self.downloadedApp = app
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                        self.showNotification = true
                                     }
-                                    .frame(width: 55, height: 55)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(app.name)
-                                            .font(.headline)
-                                        Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                    
-                                    AshteDownloadButtonView(app: app, downloadManager: downloadManager) {
-                                        self.downloadedApp = app
-                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                            self.showNotification = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                        withAnimation(.easeOut) {
+                                            self.showNotification = false
                                         }
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                                            withAnimation(.easeOut) {
-                                                self.showNotification = false
+                                    }
+                                }) {
+                                    HStack(spacing: 16) {
+                                        AsyncImage(url: app.fullImageURL) { image in
+                                            image.resizable()
+                                                 .aspectRatio(contentMode: .fill)
+                                        } placeholder: {
+                                            Color.gray.opacity(0.2)
+                                        }
+                                        .frame(width: 55, height: 55)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(app.name)
+                                                .font(.headline)
+                                            Text("\(app.category ?? "App") • \(app.size ?? "Unknown")")
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        Spacer()
+                                        
+                                        AshteDownloadButtonView(app: app, downloadManager: downloadManager) {
+                                            self.downloadedApp = app
+                                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                                self.showNotification = true
+                                            }
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                                                withAnimation(.easeOut) {
+                                                    self.showNotification = false
+                                                }
                                             }
                                         }
                                     }
+                                    .padding(.vertical, 4)
                                 }
-                                .padding(.vertical, 4)
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -241,9 +523,7 @@ struct SourcesView: View {
                 }
             }
             .onAppear {
-                Task {
-                    await loadApps()
-                }
+                Task { await loadApps() }
             }
             
             if showNotification, let app = downloadedApp {
@@ -300,15 +580,14 @@ struct SourcesView: View {
     
     private func loadApps() async {
         DispatchQueue.main.async { isLoading = true }
-        
-        // 👈 لێرەدا فایلەکە گۆڕدرا بۆ ashte.json
         guard let url = URL(string: "https://ashtemobile.tututweak.com/ashte.json") else {
             DispatchQueue.main.async { isLoading = false }
             return
         }
-        
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await URLSession.shared.data(for: request)
             let decodedApps = try JSONDecoder().decode([AshteApp].self, from: data)
             DispatchQueue.main.async {
                 self.apps = decodedApps
