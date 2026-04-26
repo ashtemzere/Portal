@@ -104,7 +104,7 @@
 		<dict>
 			<key>CFBundleIconFiles</key>
 			<array>
-				<string>AppIcon</string>
+				<string>AppIcon.png</string>
 			</array>
 			<key>UIPrerenderedIcon</key>
 			<false/>
